@@ -104,7 +104,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
-	// Agent events
+	// Batch events — process multiple events per render cycle
+	case agent.BatchEvents:
+		for _, evt := range msg {
+			m.processAgentEvent(evt)
+		}
+		m.refreshSidebar()
+		m.refreshStats()
+		cmds = append(cmds, m.rearmScheduler())
+		return m, tea.Batch(cmds...)
+
+	// Agent events (single)
 	case agent.AssistantEvent:
 		m.detail.AppendLine(msg.AgentName, msg.Text)
 		m.manager.UpdateLastEvent(msg.AgentName, "writing...")
@@ -317,6 +327,42 @@ func (m *AppModel) handleSpawnConfirm(msg SpawnConfirmMsg) (tea.Model, tea.Cmd) 
 		return m, agent.WaitForEvent(ch)
 	}
 	return m, nil
+}
+
+// processAgentEvent handles a single agent/scheduler event without refreshing sidebar.
+func (m *AppModel) processAgentEvent(evt tea.Msg) {
+	switch msg := evt.(type) {
+	case agent.AssistantEvent:
+		m.detail.AppendLine(msg.AgentName, msg.Text)
+		m.manager.UpdateLastEvent(msg.AgentName, "writing...")
+		m.manager.UpdateDuration(msg.AgentName)
+		m.logEvent(msg.AgentName, msg)
+	case agent.ToolUseEvent:
+		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input))
+		m.manager.UpdateLastEvent(msg.AgentName, fmt.Sprintf("Tool: %s", msg.ToolName))
+		m.manager.UpdateDuration(msg.AgentName)
+		m.logEvent(msg.AgentName, msg)
+	case agent.ToolResultEvent:
+		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("  ← %s", msg.Content))
+		m.logEvent(msg.AgentName, msg)
+	case agent.ResultEvent:
+		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens))
+		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
+		m.logEvent(msg.AgentName, msg)
+	case agent.AgentDoneEvent:
+		m.manager.UpdateDuration(msg.AgentName)
+		if msg.ExitCode != 0 {
+			m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
+		}
+		m.logEvent(msg.AgentName, msg)
+	case agent.ErrorEvent:
+		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
+		m.logEvent(msg.AgentName, msg)
+	case dag.AgentStartedMsg:
+		// Handled by scheduler event below
+	case dag.AgentBlockedMsg:
+		m.detail.AppendLine(msg.Name, fmt.Sprintf("◌ Blocked: %s", msg.Reason))
+	}
 }
 
 // View renders the full TUI.

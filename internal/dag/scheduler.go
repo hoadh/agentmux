@@ -39,7 +39,7 @@ func NewScheduler(g *Graph, mgr *agent.Manager) *Scheduler {
 		manager: mgr,
 		pending: make(map[string]int),
 		status:  make(map[string]agent.AgentState),
-		eventCh: make(chan tea.Msg, 64),
+		eventCh: make(chan tea.Msg, 1024),
 	}
 }
 

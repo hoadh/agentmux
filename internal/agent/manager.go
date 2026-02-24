@@ -237,13 +237,33 @@ func (m *Manager) StopAll() {
 	}
 }
 
-// WaitForEvent returns a tea.Cmd that blocks until a message arrives on ch.
+// BatchEvents wraps multiple events into a single tea.Msg for efficient processing.
+type BatchEvents []tea.Msg
+
+// WaitForEvent blocks for the first event, then drains any buffered events.
+// Returns a BatchEvents msg containing 1+ events for the TUI to process at once.
 func WaitForEvent(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
+		// Block for first event
 		msg, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return msg
+		batch := BatchEvents{msg}
+		// Drain any buffered events (non-blocking)
+		for {
+			select {
+			case m, ok := <-ch:
+				if !ok {
+					return batch
+				}
+				batch = append(batch, m)
+				if len(batch) >= 50 {
+					return batch
+				}
+			default:
+				return batch
+			}
+		}
 	}
 }
