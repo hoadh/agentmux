@@ -138,7 +138,7 @@ func (p *Process) StderrOutput() string {
 
 // buildArgs constructs CLI arguments for the claude command.
 func buildArgs(cfg config.AgentConfig, defaults config.AgentDefaults) []string {
-	args := []string{"-p", cfg.Prompt, "--output-format", "stream-json"}
+	args := []string{"-p", cfg.Prompt, "--output-format", "stream-json", "--verbose"}
 
 	model := cfg.Model
 	if model == "" {
