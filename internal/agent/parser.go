@@ -73,56 +73,64 @@ func ParseStream(agentName string, r io.Reader, ch chan<- tea.Msg) {
 }
 
 // convertEvent maps a raw JSON object to a typed event.
+// Real claude stream-json format has: system, assistant, result, rate_limit_event
+// Tool use/result are embedded in assistant message.content array blocks.
 func convertEvent(agentName string, raw map[string]any) tea.Msg {
 	typ, _ := raw["type"].(string)
 	switch typ {
 	case "assistant":
 		return convertAssistant(agentName, raw)
-	case "tool_use":
-		return convertToolUse(agentName, raw)
-	case "tool_result":
-		return convertToolResult(agentName, raw)
 	case "result":
 		return convertResult(agentName, raw)
 	default:
+		// system, rate_limit_event, etc. — skip
 		return nil
 	}
 }
 
+// convertAssistant handles assistant events where message.content is an array.
+// Content blocks can be: {type:"text", text:"..."} or {type:"tool_use", name:"...", input:{...}}
+// Returns multiple events via the first meaningful one found; tool_use blocks get separate events.
 func convertAssistant(agentName string, raw map[string]any) tea.Msg {
-	text := extractNestedString(raw, "message", "content", "text")
-	if text == "" {
-		// Try alternate structure: message.content is array
-		if msg, ok := raw["message"].(map[string]any); ok {
-			if content, ok := msg["content"].([]any); ok && len(content) > 0 {
-				if block, ok := content[0].(map[string]any); ok {
-					text, _ = block["text"].(string)
-				}
+	msg, ok := raw["message"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	content, ok := msg["content"].([]any)
+	if !ok || len(content) == 0 {
+		return nil
+	}
+
+	// Process content blocks — return first meaningful event
+	for _, item := range content {
+		block, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		blockType, _ := block["type"].(string)
+		switch blockType {
+		case "text":
+			text, _ := block["text"].(string)
+			if text != "" {
+				return AssistantEvent{AgentName: agentName, Text: text}
 			}
+		case "tool_use":
+			toolName, _ := block["name"].(string)
+			input := ""
+			if inp, ok := block["input"].(map[string]any); ok {
+				b, _ := json.Marshal(inp)
+				input = truncate(string(b), 120)
+			}
+			return ToolUseEvent{AgentName: agentName, ToolName: toolName, Input: input}
+		case "tool_result":
+			c := ""
+			if content, ok := block["content"].(string); ok {
+				c = truncate(content, 200)
+			}
+			return ToolResultEvent{AgentName: agentName, Content: c}
 		}
 	}
-	return AssistantEvent{AgentName: agentName, Text: text}
-}
-
-func convertToolUse(agentName string, raw map[string]any) tea.Msg {
-	toolName := ""
-	input := ""
-	if tool, ok := raw["tool"].(map[string]any); ok {
-		toolName, _ = tool["name"].(string)
-		if inp, ok := tool["input"].(map[string]any); ok {
-			b, _ := json.Marshal(inp)
-			input = truncate(string(b), 120)
-		}
-	}
-	return ToolUseEvent{AgentName: agentName, ToolName: toolName, Input: input}
-}
-
-func convertToolResult(agentName string, raw map[string]any) tea.Msg {
-	content := ""
-	if c, ok := raw["content"].(string); ok {
-		content = truncate(c, 200)
-	}
-	return ToolResultEvent{AgentName: agentName, Content: content}
+	return nil
 }
 
 func convertResult(agentName string, raw map[string]any) tea.Msg {
