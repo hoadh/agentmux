@@ -1,0 +1,80 @@
+version: 1
+
+# Parallel Analysis Pipeline
+# Demonstrates fan-out/fan-in pattern:
+#   scout → [security, performance, docs, tests] → summarizer
+#
+# After scout completes, 4 agents run IN PARALLEL analyzing
+# different aspects. The summarizer waits for ALL to finish.
+
+defaults:
+  model: sonnet
+  allowedTools: ["Read", "Write", "Glob", "Grep", "Bash"]
+  max_turns: 10
+
+agents:
+  scout:
+    prompt: |
+      Explore the codebase. Identify the tech stack, entry points,
+      all source files, and project structure. Write findings to
+      ANALYSIS_CONTEXT.md so other agents can reference it.
+    max_turns: 5
+
+  # --- These 4 agents run in parallel after scout ---
+
+  security-audit:
+    prompt: |
+      Read ANALYSIS_CONTEXT.md. Audit the codebase for security issues:
+      - Hardcoded secrets, API keys, credentials
+      - SQL injection, XSS, command injection vectors
+      - Insecure dependencies (check go.sum / package-lock.json)
+      - Missing input validation at system boundaries
+      - File permission issues
+      Write findings to SECURITY_REPORT.md with severity levels.
+    depends_on: [scout]
+
+  performance-review:
+    prompt: |
+      Read ANALYSIS_CONTEXT.md. Analyze the codebase for performance:
+      - N+1 queries or inefficient database access
+      - Unbounded goroutines or missing context cancellation
+      - Large allocations in hot paths
+      - Missing caching opportunities
+      - Blocking operations on main thread
+      Write findings to PERFORMANCE_REPORT.md with impact estimates.
+    depends_on: [scout]
+
+  docs-audit:
+    prompt: |
+      Read ANALYSIS_CONTEXT.md. Audit documentation completeness:
+      - Missing or outdated README sections
+      - Undocumented exported functions/types
+      - Missing API docs or usage examples
+      - Stale comments that don't match code
+      Write findings to DOCS_REPORT.md with specific file:line references.
+    depends_on: [scout]
+    max_turns: 5
+
+  test-coverage:
+    prompt: |
+      Read ANALYSIS_CONTEXT.md. Analyze test coverage and quality:
+      - Run tests with coverage: go test -cover ./... (or equivalent)
+      - Identify untested critical paths
+      - Check for flaky tests or test pollution
+      - Verify error path coverage
+      Write findings to TEST_REPORT.md with coverage percentages.
+    depends_on: [scout]
+
+  # --- Fan-in: waits for all 4 parallel agents ---
+
+  summarizer:
+    prompt: |
+      Read all report files: SECURITY_REPORT.md, PERFORMANCE_REPORT.md,
+      DOCS_REPORT.md, TEST_REPORT.md. Create a unified ANALYSIS_SUMMARY.md:
+      - Executive summary (top 5 issues across all areas)
+      - Priority matrix (critical/high/medium/low)
+      - Recommended action items in order of importance
+      - Estimated effort for each fix
+      Be concise and actionable.
+    depends_on: [security-audit, performance-review, docs-audit, test-coverage]
+    max_turns: 5
