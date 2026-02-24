@@ -1,0 +1,60 @@
+version: 1
+
+defaults:
+  model: sonnet
+  max_turns: 10
+
+agents:
+  researcher:
+    prompt: |
+      Research "Building CLI Tools in Go with Cobra and Bubbletea".
+      Use WebSearch to find recent articles, tutorials, and GitHub examples.
+      Use WebFetch to read the most relevant pages.
+      Write structured research notes to research-notes.md covering:
+      - Key concepts and why Go is great for CLIs
+      - Cobra for command structure, Bubbletea for interactive TUIs
+      - Code patterns worth highlighting
+      - Common mistakes beginners make
+      - Sources and links to cite
+    allowedTools: ["WebSearch", "WebFetch", "Read", "Write"]
+    max_turns: 8
+
+  outliner:
+    prompt: |
+      Read research-notes.md. Create a blog post outline in outline.md.
+      Include:
+      - Compelling title
+      - Hook/introduction
+      - 4-6 main sections with subpoints
+      - Code snippet plans
+      - Conclusion with call-to-action
+      Target: 2000-word post for intermediate Go developers.
+    depends_on: [researcher]
+    max_turns: 3
+
+  writer:
+    prompt: |
+      Read outline.md and research-notes.md. Write the full blog post to blog-post.md.
+      - Conversational but authoritative tone
+      - Include 3-5 real code snippets with explanations
+      - Use headers, bullets, code blocks for scannability
+      - Add TL;DR at top, "What's Next" at end
+      Write the real article, not placeholders.
+    depends_on: [outliner]
+    max_turns: 8
+
+  editor:
+    prompt: |
+      Read blog-post.md. Edit for grammar, technical accuracy, flow,
+      and remove filler. Ensure code snippets compile.
+      Write polished version to blog-post-final.md.
+    depends_on: [writer]
+
+  seo-optimizer:
+    prompt: |
+      Read blog-post-final.md. Create seo-metadata.md with:
+      - Meta title (≤60 chars), meta description (≤155 chars)
+      - 5-8 keywords, URL slug
+      - 3 social post variants (Twitter, LinkedIn, dev.to)
+    depends_on: [editor]
+    max_turns: 3

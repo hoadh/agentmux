@@ -2,20 +2,51 @@ version: 1
 
 defaults:
   model: sonnet
-  allowedTools: ["Read", "Edit", "Bash"]
-  max_turns: 10
+  allowedTools: ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
+  max_turns: 15
 
 agents:
+  scout:
+    prompt: |
+      Explore the codebase structure. List all source files, identify the tech stack,
+      entry points, and key modules. Summarize the architecture in a brief report.
+      Save findings to SCOUT_REPORT.md in the project root.
+    max_turns: 5
+
   planner:
-    prompt: "Read the codebase and create an implementation plan"
+    prompt: |
+      Read SCOUT_REPORT.md and the codebase. Create a detailed implementation plan
+      for adding a REST API endpoint that returns system health status including:
+      - Application version
+      - Uptime
+      - Database connectivity check
+      - Memory usage
+      Write the plan to PLAN.md with numbered steps and file paths.
+    depends_on: [scout]
+    max_turns: 10
+
   coder:
-    prompt: "Implement the features according to the plan"
+    prompt: |
+      Read PLAN.md and implement all steps. Follow existing code patterns and
+      conventions. Write clean, production-ready code with proper error handling.
+      Do NOT write tests — the tester agent handles that.
     depends_on: [planner]
     model: opus
-    max_turns: 20
+    max_turns: 25
+
   tester:
-    prompt: "Write and run tests for the implementation"
+    prompt: |
+      Read the code changes made by the coder. Write comprehensive unit tests
+      covering happy paths, error cases, and edge cases. Run all tests and
+      ensure they pass. Fix any failing tests.
     depends_on: [coder]
+    max_turns: 20
+
   reviewer:
-    prompt: "Review the code for quality and correctness"
+    prompt: |
+      Review all code changes for quality, security, and correctness.
+      Check for: proper error handling, no hardcoded secrets, input validation,
+      race conditions, and adherence to project conventions.
+      Write a review summary to REVIEW.md with any issues found.
     depends_on: [coder]
+    max_turns: 10
