@@ -14,15 +14,16 @@ const maxLines = 10000
 
 // DetailModel manages the agent output detail panel.
 type DetailModel struct {
-	viewport   viewport.Model
-	agentName  string
-	lines      map[string][]string // per-agent output buffers
-	autoScroll bool
-	width      int
-	height     int
-	ready      bool
-	showRaw    bool
-	pipeView   string // non-empty = show pipeline view
+	viewport    viewport.Model
+	agentName   string // plain name for matching events
+	headerText  string // formatted header for display
+	lines       map[string][]string // per-agent output buffers
+	autoScroll  bool
+	width       int
+	height      int
+	ready       bool
+	showRaw     bool
+	pipeView    string // non-empty = show pipeline view
 }
 
 // NewDetail creates a new detail panel.
@@ -72,6 +73,9 @@ func (d DetailModel) View() string {
 }
 
 func (d DetailModel) renderHeader() string {
+	if d.headerText != "" {
+		return DetailHeaderStyle.Render(d.headerText)
+	}
 	if d.agentName == "" {
 		return DetailHeaderStyle.Render("No agent selected")
 	}
@@ -154,7 +158,7 @@ func (d *DetailModel) SetHeader(info *agent.AgentInfo) {
 		model = fmt.Sprintf("  |  Model: %s", info.Config.Model)
 	}
 
-	d.agentName = fmt.Sprintf("%s %s %s  %s%s%s",
+	d.headerText = fmt.Sprintf("%s %s %s  %s%s%s",
 		info.Name, icon, info.State, dur, model, tokens)
 }
 
