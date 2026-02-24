@@ -1,5 +1,8 @@
 # Binary
 agentmux
 
+# Session reports (transient agent artifacts)
+plans/reports/
+
 # OS files
 .DS_Store
