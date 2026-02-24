@@ -1,0 +1,6 @@
+version: 1
+
+agents:
+  agent1:
+    prompt: "Do something"
+    depends_on: [nonexistent]

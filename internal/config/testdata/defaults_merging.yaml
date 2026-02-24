@@ -1,0 +1,14 @@
+version: 1
+
+defaults:
+  model: sonnet
+  allowedTools: [Read, Edit]
+  max_turns: 5
+
+agents:
+  agent1:
+    prompt: "Task 1"
+  agent2:
+    prompt: "Task 2"
+    model: opus
+    max_turns: 15

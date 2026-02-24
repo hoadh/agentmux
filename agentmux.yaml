@@ -1,0 +1,21 @@
+version: 1
+
+defaults:
+  model: sonnet
+  allowedTools: ["Read", "Edit", "Bash"]
+  max_turns: 10
+
+agents:
+  planner:
+    prompt: "Read the codebase and create an implementation plan"
+  coder:
+    prompt: "Implement the features according to the plan"
+    depends_on: [planner]
+    model: opus
+    max_turns: 20
+  tester:
+    prompt: "Write and run tests for the implementation"
+    depends_on: [coder]
+  reviewer:
+    prompt: "Review the code for quality and correctness"
+    depends_on: [coder]

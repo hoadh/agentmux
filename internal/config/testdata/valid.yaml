@@ -1,0 +1,19 @@
+version: 1
+
+defaults:
+  model: sonnet
+  allowedTools: [Read, Edit, Bash]
+  max_turns: 10
+
+agents:
+  planner:
+    prompt: "Create a plan"
+    workdir: /tmp
+  coder:
+    prompt: "Implement the plan"
+    depends_on: [planner]
+    model: opus
+    max_turns: 20
+  tester:
+    prompt: "Test the code"
+    depends_on: [coder]

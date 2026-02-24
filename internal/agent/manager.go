@@ -1,0 +1,249 @@
+package agent
+
+import (
+	"fmt"
+	"sort"
+	"sync"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoadh/agentmux/internal/config"
+)
+
+// AgentState represents the lifecycle state of an agent.
+type AgentState int
+
+const (
+	StatePending AgentState = iota
+	StateRunning
+	StateDone
+	StateFailed
+	StateKilled
+	StateBlocked
+)
+
+// String returns a human-readable label for the state.
+func (s AgentState) String() string {
+	switch s {
+	case StatePending:
+		return "Pending"
+	case StateRunning:
+		return "Running"
+	case StateDone:
+		return "Done"
+	case StateFailed:
+		return "Failed"
+	case StateKilled:
+		return "Killed"
+	case StateBlocked:
+		return "Blocked"
+	default:
+		return "Unknown"
+	}
+}
+
+// TokenUsage tracks input/output token counts.
+type TokenUsage struct {
+	Input  int
+	Output int
+}
+
+// AgentInfo holds runtime state for a registered agent.
+type AgentInfo struct {
+	Name      string
+	State     AgentState
+	Config    config.AgentConfig
+	Process   *Process
+	StartedAt time.Time
+	Duration  time.Duration
+	Tokens    TokenUsage
+	LastEvent string
+}
+
+// Manager controls the lifecycle of all agents.
+type Manager struct {
+	agents   map[string]*AgentInfo
+	defaults config.AgentDefaults
+	mu       sync.RWMutex
+}
+
+// NewManager creates a manager with the given defaults.
+func NewManager(defaults config.AgentDefaults) *Manager {
+	return &Manager{
+		agents:   make(map[string]*AgentInfo),
+		defaults: defaults,
+	}
+}
+
+// Register adds an agent to the manager in Pending state.
+func (m *Manager) Register(name string, cfg config.AgentConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.agents[name] = &AgentInfo{
+		Name:   name,
+		State:  StatePending,
+		Config: cfg,
+	}
+}
+
+// Start launches a registered agent. Returns its event channel.
+func (m *Manager) Start(name string) (chan tea.Msg, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.agents[name]
+	if !ok {
+		return nil, fmt.Errorf("agent %q not registered", name)
+	}
+	if info.State == StateRunning {
+		return nil, fmt.Errorf("agent %q already running", name)
+	}
+
+	proc := NewProcess(name, info.Config, m.defaults)
+	if err := proc.Start(info.Config, m.defaults); err != nil {
+		info.State = StateFailed
+		return nil, fmt.Errorf("start agent %q: %w", name, err)
+	}
+
+	info.Process = proc
+	info.State = StateRunning
+	info.StartedAt = time.Now()
+	info.Duration = 0
+
+	return proc.EventCh, nil
+}
+
+// Stop gracefully shuts down a running agent.
+func (m *Manager) Stop(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.agents[name]
+	if !ok {
+		return fmt.Errorf("agent %q not registered", name)
+	}
+	if info.State != StateRunning {
+		return fmt.Errorf("agent %q not running (state: %s)", name, info.State)
+	}
+
+	if info.Process != nil {
+		if err := info.Process.Shutdown(); err != nil {
+			return err
+		}
+	}
+
+	info.State = StateKilled
+	info.Duration = time.Since(info.StartedAt)
+	return nil
+}
+
+// Restart stops and re-starts an agent.
+func (m *Manager) Restart(name string) (chan tea.Msg, error) {
+	m.mu.RLock()
+	info, ok := m.agents[name]
+	isRunning := ok && info.State == StateRunning
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("agent %q not registered", name)
+	}
+
+	if isRunning {
+		if err := m.Stop(name); err != nil {
+			return nil, err
+		}
+	}
+
+	return m.Start(name)
+}
+
+// List returns all agents sorted alphabetically (copies for safe concurrent access).
+func (m *Manager) List() []*AgentInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	names := make([]string, 0, len(m.agents))
+	for name := range m.agents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	result := make([]*AgentInfo, 0, len(names))
+	for _, name := range names {
+		info := m.agents[name]
+		cp := *info
+		result = append(result, &cp)
+	}
+	return result
+}
+
+// Get returns info for a specific agent.
+func (m *Manager) Get(name string) *AgentInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.agents[name]
+}
+
+// SetState updates agent state (used by scheduler).
+func (m *Manager) SetState(name string, state AgentState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if info, ok := m.agents[name]; ok {
+		info.State = state
+	}
+}
+
+// UpdateTokens records token usage for an agent.
+func (m *Manager) UpdateTokens(name string, input, output int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if info, ok := m.agents[name]; ok {
+		info.Tokens.Input += input
+		info.Tokens.Output += output
+	}
+}
+
+// UpdateDuration refreshes the duration for running agents.
+func (m *Manager) UpdateDuration(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if info, ok := m.agents[name]; ok && info.State == StateRunning {
+		info.Duration = time.Since(info.StartedAt)
+	}
+}
+
+// UpdateLastEvent sets the last event summary for sidebar display.
+func (m *Manager) UpdateLastEvent(name string, summary string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if info, ok := m.agents[name]; ok {
+		info.LastEvent = summary
+	}
+}
+
+// StopAll gracefully shuts down all running agents.
+func (m *Manager) StopAll() {
+	m.mu.RLock()
+	running := make([]string, 0)
+	for name, info := range m.agents {
+		if info.State == StateRunning {
+			running = append(running, name)
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, name := range running {
+		m.Stop(name)
+	}
+}
+
+// WaitForEvent returns a tea.Cmd that blocks until a message arrives on ch.
+func WaitForEvent(ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
+}
