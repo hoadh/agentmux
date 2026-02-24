@@ -2,7 +2,7 @@
 
 ## Go Version & Project Layout
 
-- **Go Version**: 1.24+
+- **Go Version**: 1.26+
 - **Project Root**: `github.com/hoadh/agentmux`
 - **Structure**:
   ```
@@ -85,12 +85,15 @@ type Scheduler struct {
     eventCh chan tea.Msg
 }
 
-// Buffer allows scheduler to emit events without TUI reader blocking
-s.eventCh = make(chan tea.Msg, 10)
+// Large buffer (1024) allows scheduler to emit events without TUI reader blocking.
+// Scheduler produces faster than TUI can consume; backpressure would block agent goroutines.
+s.eventCh = make(chan tea.Msg, 1024)
 ```
 
+- **Agent event channels**: 256 buffer to prevent agent goroutines from blocking
+- **Scheduler eventCh**: 1024 buffer (scheduler produces faster than TUI consumes)
 - Prefer buffered channels for pub-sub patterns
-- Document buffer size and semantics
+- Document buffer size and semantics rationale
 - Close channel only if you own it (coordinator, not workers)
 
 ### Goroutines
@@ -106,6 +109,7 @@ go func(p *Process) {
 - Each agent's Process reads stdout in dedicated goroutine
 - Parser emits events back to manager via channels or callbacks
 - No shared buffers between goroutine pairs; each has private readers
+- **Goroutine Cleanup**: Close Process.EventCh after process exit to prevent goroutine leaks in `WaitForEvent` loops
 
 ## Testing
 
@@ -201,6 +205,173 @@ func NewScheduler(g *Graph, mgr *agent.Manager) *Scheduler {
 - All dependencies passed to constructors
 - Avoid global state in test-critical code
 - Mock via interfaces in tests
+
+## NDJSON Parser Patterns
+
+When consuming Claude CLI `stream-json` output:
+
+**Use `bufio.Scanner`, NOT `json.Decoder`:**
+
+```go
+scanner := bufio.NewScanner(reader)
+for scanner.Scan() {
+    line := scanner.Bytes()
+    var event map[string]interface{}
+    if err := json.Unmarshal(line, &event); err != nil {
+        continue  // Skip malformed line
+    }
+
+    // Validate event type before accessing fields
+    eventType, ok := event["type"].(string)
+    if !ok {
+        continue
+    }
+
+    switch eventType {
+    case "assistant":
+        // Process message.content blocks
+        if msg, ok := event["message"].(map[string]interface{}); ok {
+            if content, ok := msg["content"].([]interface{}); ok {
+                for _, block := range content {
+                    if b, ok := block.(map[string]interface{}); ok {
+                        blockType, _ := b["type"].(string)
+                        // Handle text, tool_use, tool_result
+                    }
+                }
+            }
+        }
+    case "result":
+        // Handle result event
+    case "rate_limit_event":
+        // Handle rate limit
+    }
+}
+```
+
+**Why Scanner over Decoder:**
+- `Scanner` recovers from malformed/non-JSON lines by skipping them
+- `json.Decoder` fails completely on the first bad line, losing all subsequent data
+- Claude CLI output may contain stray characters or incomplete lines in edge cases
+
+**Requirements for Claude CLI:**
+- Process args: `["-p", prompt, "--output-format", "stream-json", "--verbose", ...]`
+- The `--verbose` flag is REQUIRED in print mode (`-p`) for proper `stream-json` format
+- Without `--verbose`, the format differs and parsing will fail
+
+## TUI Identity vs Display Fields
+
+When a struct needs both an identity field for event matching AND a formatted display string, separate them:
+
+```go
+type DetailModel struct {
+    // Identity: used for matching agent events
+    agentName string
+
+    // Display: used for rendering, updated by SetHeader()
+    headerText string
+
+    lines []string
+}
+
+func (d *DetailModel) AppendLine(agent, line string) {
+    // Compare against identity field, not headerText!
+    if agent == d.agentName {
+        d.lines = append(d.lines, line)
+    }
+}
+
+func (d *DetailModel) SetHeader(text string) {
+    // Only update display field
+    d.headerText = text
+}
+```
+
+**Critical Pattern:** Never overwrite identity fields with formatted content.
+
+**Problem Avoided:**
+- If `agentName` were overwritten with `"researcher ● Running 2m..."`, then `AppendLine("researcher", ...)` would fail to match
+- This causes logs to disappear silently
+
+## Batch Event Processing
+
+When processing high-throughput event streams in Bubbletea, batch events to prevent per-event re-renders:
+
+```go
+func (m *DetailModel) drainEvents(eventCh chan tea.Msg) []tea.Msg {
+    batch := make([]tea.Msg, 0, 50)
+
+    // Block for first event
+    batch = append(batch, <-eventCh)
+
+    // Drain up to 50 buffered non-blocking
+    for len(batch) < 50 {
+        select {
+        case msg := <-eventCh:
+            batch = append(batch, msg)
+        default:
+            return batch
+        }
+    }
+    return batch
+}
+```
+
+**Performance Impact:**
+- Without batching: TUI re-renders on every single event (can be 100+ per second)
+- With batching: TUI re-renders once per batch (capped at 50 events)
+- Result: Dramatic responsiveness improvement, CPU drops significantly
+
+**Pattern Details:**
+- Block for at least one event (don't burn CPU spinning)
+- Cap batch size at 50 to bound processing time per render cycle
+- Return batch immediately if channel empties
+
+## Data Race Prevention
+
+Ensure concurrent access patterns prevent data races:
+
+```go
+// Manager.List() returns copies, not pointers
+func (m *Manager) List() []*Info {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+
+    result := make([]*Info, 0, len(m.agents))
+    for _, info := range m.agents {
+        cp := *info  // Value copy prevents external mutation of shared state
+        result = append(result, &cp)
+    }
+    return result
+}
+
+// Scheduler: collect work under lock, execute side effects after unlock
+func (s *Scheduler) ProcessDone(agent string) {
+    s.mu.Lock()
+    ready := []string{}
+    for dep, agent := range s.pending {
+        s.pending[dep]--
+        if s.pending[dep] == 0 {
+            ready = append(ready, dep)
+        }
+    }
+    s.mu.Unlock()  // Release lock BEFORE sending on channel
+
+    for _, a := range ready {
+        s.eventCh <- AgentReadyMsg{Agent: a}  // No lock held
+        s.manager.SpawnAgent(a)                 // No lock held
+    }
+}
+```
+
+**Deadlock Prevention:**
+- Never hold a lock while sending on a channel
+- If the channel receiver also holds locks, you can deadlock
+- Collect work items under lock, execute side effects after unlock
+
+**Data Race Prevention:**
+- Return value copies from accessor methods, not shared pointers
+- Always synchronize reads/writes of shared state under the same lock
+- Close channels only from the sending end (prevents send-on-closed panic)
 
 ## Comments
 
