@@ -49,10 +49,13 @@ func NewApp(mgr *agent.Manager, sched *dag.Scheduler, graph *dag.Graph, ctx cont
 
 	logWriter, _ := agentlog.NewWriter()
 
+	sb := NewStatusBar()
+	sb.SetFocusPanel("sidebar")
+
 	return AppModel{
 		sidebar:   sidebar,
 		detail:    NewDetail(),
-		statusbar: NewStatusBar(),
+		statusbar: sb,
 		spawn:     NewSpawnDialog(),
 		focus:     focusSidebar,
 		manager:   mgr,
@@ -197,6 +200,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SpawnConfirmMsg:
 		return m.handleSpawnConfirm(msg)
+
+	case SpawnCancelMsg:
+		m.spawn.Reset()
+		m.focus = focusSidebar
+		m.sidebar.SetFocused(true)
+		m.statusbar.SetFocusPanel("sidebar")
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -232,35 +242,42 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.focus == focusSidebar {
 			m.focus = focusDetail
 			m.sidebar.SetFocused(false)
+			m.statusbar.SetFocusPanel("detail")
 		} else {
 			m.focus = focusSidebar
 			m.sidebar.SetFocused(true)
+			m.statusbar.SetFocusPanel("sidebar")
 		}
 		return m, nil
 
 	case "n":
 		m.spawn.SetActive(true)
 		m.focus = focusSpawn
+		m.statusbar.SetFocusPanel("spawn")
 		return m, m.spawn.promptInput.Focus()
 
-	case "k":
-		name := m.sidebar.SelectedAgent()
-		if name != "" {
-			info := m.manager.Get(name)
-			if info != nil && info.State == agent.StateRunning {
-				m.confirmKill = name
-				m.statusbar.SetMode("confirm-kill")
+	case "K":
+		if m.focus == focusSidebar {
+			name := m.sidebar.SelectedAgent()
+			if name != "" {
+				info := m.manager.Get(name)
+				if info != nil && info.State == agent.StateRunning {
+					m.confirmKill = name
+					m.statusbar.SetMode("confirm-kill")
+				}
 			}
 		}
 		return m, nil
 
 	case "r":
-		name := m.sidebar.SelectedAgent()
-		if name != "" {
-			ch, err := m.manager.Restart(name)
-			if err == nil {
-				m.refreshSidebar()
-				return m, agent.WaitForEvent(ch)
+		if m.focus == focusSidebar {
+			name := m.sidebar.SelectedAgent()
+			if name != "" {
+				ch, err := m.manager.Restart(name)
+				if err == nil {
+					m.refreshSidebar()
+					return m, agent.WaitForEvent(ch)
+				}
 			}
 		}
 		return m, nil
@@ -320,6 +337,7 @@ func (m *AppModel) handleSpawnConfirm(msg SpawnConfirmMsg) (tea.Model, tea.Cmd) 
 	m.spawn.Reset()
 	m.focus = focusSidebar
 	m.sidebar.SetFocused(true)
+	m.statusbar.SetFocusPanel("sidebar")
 	m.refreshSidebar()
 	m.refreshStats()
 
@@ -386,7 +404,11 @@ func (m AppModel) View() string {
 	if detailWidth < 10 {
 		detailWidth = 10
 	}
-	detail := DetailStyle.Width(detailWidth).Height(m.height - 3).Render(m.detail.View())
+	detailStyle := DetailStyle
+	if m.focus == focusDetail {
+		detailStyle = DetailFocusedStyle
+	}
+	detail := detailStyle.Width(detailWidth).Height(m.height - 3).Render(m.detail.View())
 
 	// Body
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, detail)

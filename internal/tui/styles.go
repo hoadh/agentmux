@@ -29,7 +29,15 @@ var (
 				BorderStyle(lipgloss.NormalBorder()).
 				BorderForeground(AccentColor)
 
-	DetailStyle = lipgloss.NewStyle()
+	DetailStyle = lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(MutedColor)
+
+	DetailFocusedStyle = lipgloss.NewStyle().
+				BorderLeft(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderForeground(AccentColor)
 
 	DetailHeaderStyle = lipgloss.NewStyle().
 				Bold(true).

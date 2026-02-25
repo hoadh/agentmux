@@ -20,9 +20,10 @@ type PipelineStats struct {
 
 // StatusBarModel manages the bottom status bar.
 type StatusBarModel struct {
-	width int
-	stats PipelineStats
-	mode  string
+	width      int
+	stats      PipelineStats
+	mode       string
+	focusPanel string // "sidebar", "detail", or "spawn"
 }
 
 // NewStatusBar creates a new status bar.
@@ -40,7 +41,8 @@ func (s StatusBarModel) View() string {
 	case "spawn":
 		left = " Enter:confirm  Esc:cancel  Spawning new agent..."
 	default:
-		left = " [n]ew [k]ill [r]estart [l]ogs [p]ipe  tab:focus  q:quit"
+		focusHint := lipgloss.NewStyle().Bold(true).Render("[" + s.focusPanel + "]")
+		left = " " + focusHint + "  [n]ew [K]ill [r]estart [l]ogs [p]ipe  tab:focus  q:quit"
 	}
 
 	if s.stats.Total > 0 {
@@ -79,4 +81,9 @@ func (s *StatusBarModel) SetStats(stats PipelineStats) {
 // SetMode switches the display mode.
 func (s *StatusBarModel) SetMode(mode string) {
 	s.mode = mode
+}
+
+// SetFocusPanel updates the active panel indicator.
+func (s *StatusBarModel) SetFocusPanel(panel string) {
+	s.focusPanel = panel
 }
