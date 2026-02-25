@@ -469,44 +469,74 @@ func (m *AppModel) renderPipelineView() string {
 		status = m.scheduler.Status()
 	}
 
-	// Render roots and their dependents recursively
-	rendered := map[string]bool{}
-	roots := m.graph.Roots()
-	for _, root := range roots {
-		m.renderNode(&b, root, status, rendered, 0)
+	// Level-based rendering: compute depth as longest path from any root.
+	// This correctly positions fan-in nodes (multiple dependencies) after
+	// all their parents, not nested under the first parent.
+	nodes := m.graph.Nodes()
+	depth := make(map[string]int, len(nodes))
+	for _, name := range nodes {
+		m.computeDepth(name, depth)
+	}
+
+	// Group nodes by depth level
+	maxDepth := 0
+	for _, d := range depth {
+		if d > maxDepth {
+			maxDepth = d
+		}
+	}
+	levels := make([][]string, maxDepth+1)
+	for _, name := range nodes {
+		d := depth[name]
+		levels[d] = append(levels[d], name)
+	}
+
+	// Render level by level
+	for _, names := range levels {
+		for _, name := range names {
+			d := depth[name]
+			indent := strings.Repeat("  ", d)
+			prefix := ""
+			if d > 0 {
+				prefix = "└─► "
+			}
+
+			state := agent.StatePending
+			if s, ok := status[name]; ok {
+				state = s
+			}
+			icon := StyledIcon(state)
+
+			info := m.manager.Get(name)
+			dur := ""
+			if info != nil && info.Duration > 0 {
+				dur = fmt.Sprintf("  (%s)", formatDuration(info.Duration))
+			}
+
+			fmt.Fprintf(&b, "%s%s%s %s  %s%s\n", indent, prefix, icon, name, state, dur)
+		}
 	}
 
 	return b.String()
 }
 
-func (m *AppModel) renderNode(b *strings.Builder, name string, status map[string]agent.AgentState, rendered map[string]bool, depth int) {
-	if rendered[name] {
-		return
+// computeDepth calculates the longest path from any root to a node (memoized).
+func (m *AppModel) computeDepth(name string, depth map[string]int) int {
+	if d, ok := depth[name]; ok {
+		return d
 	}
-	rendered[name] = true
-
-	indent := strings.Repeat("  ", depth)
-	prefix := ""
-	if depth > 0 {
-		prefix = "└─► "
+	deps := m.graph.Dependencies(name)
+	if len(deps) == 0 {
+		depth[name] = 0
+		return 0
 	}
-
-	state := agent.StatePending
-	if s, ok := status[name]; ok {
-		state = s
-	}
-	icon := StyledIcon(state)
-
-	info := m.manager.Get(name)
-	dur := ""
-	if info != nil && info.Duration > 0 {
-		dur = fmt.Sprintf("  (%s)", formatDuration(info.Duration))
-	}
-
-	fmt.Fprintf(b, "%s%s%s %s  %s%s\n", indent, prefix, icon, name, state, dur)
-
-	deps := m.graph.Dependents(name)
+	maxParent := 0
 	for _, dep := range deps {
-		m.renderNode(b, dep, status, rendered, depth+1)
+		d := m.computeDepth(dep, depth)
+		if d > maxParent {
+			maxParent = d
+		}
 	}
+	depth[name] = maxParent + 1
+	return maxParent + 1
 }
