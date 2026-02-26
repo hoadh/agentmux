@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,6 +13,9 @@ import (
 	"github.com/hoadh/agentmux/internal/dag"
 	agentlog "github.com/hoadh/agentmux/internal/log"
 )
+
+// tickMsg fires periodically to refresh running agent durations.
+type tickMsg time.Time
 
 type focus int
 
@@ -84,6 +88,11 @@ func (m AppModel) Init() tea.Cmd {
 		}
 	}
 
+	// Periodic tick to keep running durations up-to-date
+	cmds = append(cmds, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	}))
+
 	// Select first agent if available
 	if name := m.sidebar.SelectedAgent(); name != "" {
 		m.detail.SetAgent(name)
@@ -103,6 +112,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 		m.resizeAll()
 		return m, nil
+
+	case tickMsg:
+		// Refresh durations for all running agents every second
+		for _, info := range m.manager.List() {
+			if info.State == agent.StateRunning {
+				m.manager.UpdateDuration(info.Name)
+			}
+		}
+		m.refreshSidebar()
+		// Refresh detail header so duration updates in real-time
+		if name := m.sidebar.SelectedAgent(); name != "" {
+			if info := m.manager.Get(name); info != nil {
+				m.detail.SetHeader(info)
+			}
+		}
+		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
