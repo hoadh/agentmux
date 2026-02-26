@@ -2,7 +2,7 @@
 
 A Go TUI for spawning, orchestrating, and monitoring AI agents (Claude, Gemini) in parallel via DAG-based pipeline execution and stream-json event streams.
 
-**Version:** v0.1.0 | **Go:** 1.26+ | **License:** MIT
+**Version:** v0.1.0 | **Go:** 1.24.2+ | **License:** MIT
 
 ## Overview
 
@@ -86,6 +86,40 @@ Each agent can target a different CLI backend. Set `backend` at the defaults or 
 | `gemini` | `gemini` | Model supported; allowedTools/max_turns ignored (warning emitted) |
 
 Adding a new backend requires only one new Go file with `init()` registration.
+
+#### Config Validation
+
+agentmux validates your pipeline config at load time and emits warnings for backend-specific incompatibilities.
+
+**Hard errors** (abort startup):
+
+| Condition | Error |
+|-----------|-------|
+| Agent missing `prompt` | `agent "X": prompt is required` |
+| Agent depends on itself | `agent "X": cannot depend on itself` |
+| Agent depends on undefined agent | `agent "X": unknown dependency "Y"` |
+| Unknown backend name | `unknown backend "X" (available: [claude gemini])` |
+
+**Warnings** (printed to stderr, execution continues):
+
+| Condition | Warning |
+|-----------|---------|
+| Gemini agent has `allowedTools` | `agent "X": allowedTools ignored for gemini backend` |
+| Gemini agent has `max_turns > 0` | `agent "X": max_turns ignored for gemini backend` |
+
+Warnings also trigger for values inherited from `defaults` (defaults are merged before validation).
+
+#### Models & Tools by Backend
+
+| Feature | Claude | Gemini |
+|---------|--------|--------|
+| `model` | Passed as `--model` flag | Passed as `--model` flag |
+| `allowedTools` | Each tool passed as `--allowedTools <tool>` | **Ignored** (warning emitted) |
+| `max_turns` | Passed as `--max-turns` flag | **Ignored** (warning emitted) |
+
+**Model resolution**: If an agent has no `model`, it inherits from `defaults.model`. If still empty, no `--model` flag is passed and the backend CLI uses its own default. Model names are not validated at config time — invalid names produce runtime errors from the backend CLI.
+
+**Defaults inheritance**: `ApplyDefaults()` merges global `defaults` into each agent for any unset field: `backend`, `model`, `allowedTools`, `max_turns`. The `workdir` field defaults to `"."` if empty.
 
 See [Config Guide](./docs/configuration.md) for full schema.
 
