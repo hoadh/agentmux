@@ -4,18 +4,24 @@ Complete guide for building, installing, configuring, and running agentmux pipel
 
 ## Prerequisites
 
-- **Go 1.26+**: Required for building from source
-- **Claude CLI**: Installed and in PATH; version 0.3.0+ recommended
+- **Go 1.24.2+**: Required for building from source
+- **Claude CLI** and/or **Gemini CLI**: At least one required (both optional for multi-backend pipelines)
+  - Claude: For Claude-backed agents
+  - Gemini: For Gemini-backed agents
+  - Both: Enables mixed-backend pipelines
 - **Unix-like system**: Linux, macOS, or WSL2 on Windows
 - **Terminal**: 80×24 minimum for TUI display
 
 ### Check Prerequisites
 
 ```bash
-go version          # Should be go1.26 or later
-claude --version    # Should be 0.3.0+
+go version          # Should be go1.24.2 or later
+claude --version    # If using Claude backend (optional)
+gemini --version    # If using Gemini backend (optional)
 echo $SHELL         # Should be /bin/bash, /bin/zsh, etc.
 ```
+
+**Note**: You need at least one CLI backend (Claude or Gemini). For multi-backend pipelines, install both.
 
 ---
 
@@ -183,6 +189,49 @@ agents:
     max_turns: 5
 ```
 
+#### Example: Multi-Backend Pipeline
+
+Mix Claude and Gemini agents in the same pipeline:
+
+```yaml
+version: 1
+
+defaults:
+  backend: "claude"      # Default backend
+  model: "sonnet"
+  max_turns: 10
+
+agents:
+  scout:
+    backend: "gemini"    # Override: use Gemini for this agent
+    model: "gemini-2.5-pro"
+    prompt: "Analyze the codebase. Summarize architecture and key technologies."
+    max_turns: 5
+
+  planner:
+    # Inherits backend: "claude" from defaults
+    prompt: "Based on ANALYSIS.md, create a detailed implementation plan."
+    depends_on: [scout]
+    max_turns: 10
+
+  coder:
+    # Inherits backend: "claude" from defaults
+    prompt: "Following the plan, implement the code."
+    depends_on: [planner]
+    model: "opus"
+    max_turns: 20
+
+  reviewer:
+    backend: "gemini"    # Another Gemini agent
+    prompt: "Review the code for quality and compliance."
+    depends_on: [coder]
+    max_turns: 5
+```
+
+**Validation**: agentmux validates backend names and emits warnings for unsupported features:
+- Claude supports: `model`, `allowedTools`, `max_turns`
+- Gemini supports: `model` only (allowedTools/max_turns ignored with warnings)
+
 ### Validation
 
 Validate your config before running:
@@ -263,18 +312,34 @@ cat ~/.agentmux/logs/*.jsonl | jq '.'
 
 **Symptom**: Agent spawns but detail panel remains empty
 
-**Cause**: Claude CLI format mismatch (missing `--verbose` flag)
+**Cause**: CLI backend not invoked correctly (missing flags or binary not found)
 
 **Solution**:
-```bash
-# Verify Claude CLI invocation includes --verbose
-agentmux run -c agentmux.yaml -v
 
-# Check that Claude CLI supports stream-json
+For **Claude** agents:
+```bash
+# Verify Claude CLI invocation includes --verbose and --output-format stream-json
 claude -p "test" --output-format stream-json --verbose
+
+# Check that Claude CLI is installed and in PATH
+which claude
+claude --version
 ```
 
-agentmux requires `--verbose` flag when using `-p` (print mode) with `--output-format stream-json`. This is a Claude CLI requirement, not an agentmux bug.
+For **Gemini** agents:
+```bash
+# Verify Gemini CLI invocation
+gemini "test" --output-format stream-json --approval-mode auto_edit
+
+# Check installation
+which gemini
+gemini --version
+```
+
+**Note**:
+- Claude requires `--verbose` flag in print mode (`-p`) for `stream-json` format
+- Gemini uses `--approval-mode auto_edit` for non-interactive operation
+- Both CLIs must be in PATH or pipeline will fail at agent startup
 
 ### Issue: "DAG cycle detected"
 

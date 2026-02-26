@@ -17,18 +17,19 @@
 
 ### Completed Features
 
-- [x] YAML-based pipeline definition (config package)
-- [x] DAG validation and topological sort (dag/graph.go)
-- [x] Event-driven dependency orchestration (dag/scheduler.go)
-- [x] Parallel agent execution (agent/manager.go)
-- [x] NDJSON stream parsing with malformed line recovery (agent/parser.go)
-- [x] Interactive TUI with sidebar, detail, statusbar (tui/ package)
-- [x] Real-time agent state tracking (Running, Done, Failed, Killed, Blocked)
+- [x] YAML-based pipeline definition with defaults merging
+- [x] DAG validation with Kahn's cycle detection and topological sort
+- [x] Event-driven dependency orchestration with pending count tracking
+- [x] **Multi-backend support** (Claude & Gemini CLIs via registry pattern)
+- [x] Parallel agent execution with independent backend selection
+- [x] NDJSON stream parsing with bufio.Scanner (malformed line recovery)
+- [x] Interactive TUI with sidebar, detail, statusbar, spawn modal
+- [x] Real-time agent state tracking (Pending → Running → Done/Failed/Killed/Blocked)
 - [x] Graceful process shutdown (SIGTERM + 5s → SIGKILL)
-- [x] Audit logging to JSONL (internal/log/)
-- [x] Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, q quit)
-- [x] Batch event processing for TUI responsiveness
-- [x] Concurrent-safe state management (sync.RWMutex, sync.Mutex)
+- [x] Audit logging to JSONL (`~/.agentmux/logs/`)
+- [x] Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, l toggle, p pipeline, q quit)
+- [x] Batch event processing (up to 50 events/cycle) for TUI responsiveness
+- [x] Concurrent-safe state management (sync.RWMutex on Manager, sync.Mutex on Scheduler)
 
 ### Known Limitations
 

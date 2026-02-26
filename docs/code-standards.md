@@ -2,7 +2,7 @@
 
 ## Go Version & Project Layout
 
-- **Go Version**: 1.26+
+- **Go Version**: 1.24.2+ (minimum version in go.mod)
 - **Project Root**: `github.com/hoadh/agentmux`
 - **Structure**:
   ```
@@ -206,9 +206,44 @@ func NewScheduler(g *Graph, mgr *agent.Manager) *Scheduler {
 - Avoid global state in test-critical code
 - Mock via interfaces in tests
 
+## Backend Registry Pattern
+
+Adding a new backend (e.g., OpenAI CLI) requires only one new file:
+
+```go
+// internal/agent/backend/openai.go
+package backend
+
+import "github.com/hoadh/agentmux/internal/log"
+
+func init() {
+    // Self-register on import
+    Register("openai", &OpenAIBackend{})
+}
+
+type OpenAIBackend struct{}
+
+func (b *OpenAIBackend) Args(cfg *config.AgentConfig) []string {
+    // Build command-line args for OpenAI CLI
+    args := []string{"openai", "chat"}
+    if cfg.Model != "" {
+        args = append(args, "--model", cfg.Model)
+    }
+    // ... add more flags
+    return args
+}
+
+func (b *OpenAIBackend) ConvertEvent(line []byte) (BackendEvent, error) {
+    // Parse NDJSON and map to shared event types
+    // ...
+}
+```
+
+**Why it works**: Backends share a common interface (`BackendEvent` types) and register via `init()` without any changes to existing code.
+
 ## NDJSON Parser Patterns
 
-When consuming Claude CLI `stream-json` output:
+When consuming CLI `stream-json` output:
 
 **Use `bufio.Scanner`, NOT `json.Decoder`:**
 
@@ -253,10 +288,13 @@ for scanner.Scan() {
 - `json.Decoder` fails completely on the first bad line, losing all subsequent data
 - Claude CLI output may contain stray characters or incomplete lines in edge cases
 
-**Requirements for Claude CLI:**
-- Process args: `["-p", prompt, "--output-format", "stream-json", "--verbose", ...]`
-- The `--verbose` flag is REQUIRED in print mode (`-p`) for proper `stream-json` format
-- Without `--verbose`, the format differs and parsing will fail
+**Backend CLI Requirements:**
+- **Claude**: `claude -p <prompt> --output-format stream-json --verbose [--model X] [--allowedTools T]... [--max-turns N]`
+  - `--verbose` flag REQUIRED in print mode (`-p`) for proper `stream-json` format
+  - Without it, format differs and parsing fails
+- **Gemini**: `gemini <prompt> --output-format stream-json --approval-mode auto_edit [--model X]`
+  - allowedTools and max_turns are ignored (warnings emitted at config load)
+- **Extensible**: Each backend's `Args()` method constructs its own command line
 
 ## TUI Identity vs Display Fields
 

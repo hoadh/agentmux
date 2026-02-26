@@ -94,18 +94,18 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 ## Acceptance Criteria
 
 ### Functional
-- [ ] YAML config parses correctly; validation rejects invalid syntax
-- [ ] DAG with N agents executes in topological order; no dependency violations
-- [ ] Agents execute in parallel; final time ≤ max(agent time) + overhead
-- [ ] TUI updates in real-time; events display within 100ms
-- [ ] Process cleanup on quit; no orphaned processes after exit
-- [ ] Agent state transitions correctly (Pending → Running → Done/Failed/Killed)
-- [ ] Logs persist to `~/.agentmux/logs/`; no data loss on crash
+- [x] YAML config parses correctly; validation rejects invalid syntax
+- [x] DAG with N agents executes in topological order; no dependency violations
+- [x] Agents execute in parallel; final time ≤ max(agent time) + overhead
+- [x] TUI updates in real-time; events display within 100ms
+- [x] Process cleanup on quit; no orphaned processes after exit
+- [x] Agent state transitions correctly (Pending → Running → Done/Failed/Killed)
+- [x] Logs persist to `~/.agentmux/logs/`; no data loss on crash
 
 ### Non-Functional
-- [ ] Tests pass with >80% coverage on parser, scheduler, manager
-- [ ] Benchmark: 20 agents spawn + 100 events/agent in <5s without UI lag
-- [ ] Code compiles with Go 1.26+; no lint errors
+- [x] Tests pass with >80% coverage on parser, scheduler, manager
+- [x] Benchmark: 20 agents spawn + 100 events/agent in <5s without UI lag
+- [x] Code compiles with Go 1.24.2+; no lint errors
 - [ ] Documentation covers config, architecture, keybindings, troubleshooting
 
 ## Success Metrics
@@ -146,9 +146,10 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 ## Dependencies & Constraints
 
 ### External Dependencies
-- Claude CLI (subprocess): Requires `--verbose` flag for `stream-json` format in print mode
-- Go 1.26+: No older versions supported
+- Claude & Gemini CLIs (subprocesses): Support multi-backend orchestration
+- Go 1.24.2+: Minimum version required
 - YAML v3: For config parsing
+- Bubbletea v1.3.5+: TUI framework
 
 ### Technical Constraints
 - Single-machine execution only (no native distribution in v0.1)
