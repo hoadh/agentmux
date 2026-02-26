@@ -8,8 +8,8 @@ import (
 var (
 	SidebarMinWidth = 20
 	SidebarMaxWidth = 50
-	// Padding beyond agent name: " ● " (3) + max duration " XXmXXs" (8) + right margin (2)
-	SidebarPadding = 13
+	// Padding beyond agent name: prefix (1) + " ● " (3) + max duration " XXmXXs" (8) + right margin (2)
+	SidebarPadding = 14
 
 	// Colors
 	AccentColor  = lipgloss.Color("62")

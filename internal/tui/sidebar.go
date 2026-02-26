@@ -83,20 +83,37 @@ func (s SidebarModel) View() string {
 			dur = fmt.Sprintf(" %s", formatDuration(info.Duration))
 		}
 
-		// Build line without ANSI codes for width calc, render with icon separately
-		nameWithDur := fmt.Sprintf("%s%s", name, dur)
-		maxNameW := s.width - 5 // margins (1) + icon (1) + space (1) + right pad (2)
-		if maxNameW > 0 && len([]rune(nameWithDur)) > maxNameW {
-			nameWithDur = string([]rune(nameWithDur)[:maxNameW])
+		// Arrow prefix for focused agent, space for others
+		prefix := " "
+		if i == s.cursor {
+			prefix = "▸"
 		}
-		line := fmt.Sprintf(" %s %s", icon, nameWithDur)
+
+		// Right-align duration: "▸ ● name       1m23s"
+		usableW := s.width - 5 // prefix (1) + space (1) + icon (1) + space (1) + right margin (1)
+		nameRunes := []rune(name)
+		durRunes := []rune(dur)
+		nameW := len(nameRunes)
+		durW := len(durRunes)
+
+		if usableW > 0 && nameW+durW > usableW {
+			maxName := usableW - durW
+			if maxName < 1 {
+				maxName = 1
+			}
+			nameRunes = nameRunes[:maxName]
+			nameW = maxName
+		}
+
+		gap := usableW - nameW - durW
+		if gap < 0 {
+			gap = 0
+		}
+
+		line := fmt.Sprintf("%s %s %s%s%s", prefix, icon, string(nameRunes), strings.Repeat(" ", gap), dur)
 
 		if i == s.cursor {
-			line = lipgloss.NewStyle().
-				Bold(true).
-				Background(lipgloss.Color("236")).
-				Width(s.width - 2).
-				Render(line)
+			line = lipgloss.NewStyle().Bold(true).Render(line)
 		}
 
 		b.WriteString(line)
