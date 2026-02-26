@@ -117,6 +117,51 @@ Warnings also trigger for values inherited from `defaults` (defaults are merged 
 | `allowedTools` | Each tool passed as `--allowedTools <tool>` | **Ignored** (warning emitted) |
 | `max_turns` | Passed as `--max-turns` flag | **Ignored** (warning emitted) |
 
+##### Claude Models
+
+| Alias | Full Model ID | Notes |
+|-------|---------------|-------|
+| `opus` | `claude-opus-4-6` | Most capable, adaptive reasoning |
+| `sonnet` | `claude-sonnet-4-6` | Balanced speed/quality (default) |
+| `haiku` | `claude-haiku-4-5` | Fastest, lightweight tasks |
+
+##### Claude Tools (`allowedTools`)
+
+| Category | Tools |
+|----------|-------|
+| File Ops | `Read`, `Edit`, `Write`, `NotebookEdit`, `Glob` |
+| Shell | `Bash` |
+| Search | `Grep`, `WebSearch`, `WebFetch` |
+| Task Mgmt | `Task`, `TodoRead`, `TodoWrite` |
+| MCP | `mcp__<server>__<tool>` pattern |
+
+Supports granular patterns: `Bash(git log *)`, `Edit(src/**)`, etc.
+
+##### Gemini Models
+
+| Model ID | Notes |
+|----------|-------|
+| `gemini-2.5-pro` | Default, complex reasoning |
+| `gemini-2.5-flash` | Fast inference |
+| `gemini-2.5-flash-lite` | Most cost-efficient |
+| `gemini-3-pro-preview` | Preview, latest generation |
+| `gemini-3-flash-preview` | Preview, fast |
+
+No short aliases — full model IDs required.
+
+##### Gemini Tools
+
+| Category | Tools |
+|----------|-------|
+| Search | `google_web_search` |
+| File Ops | Read, write, glob, text search/replace |
+| Shell | Command execution (with confirmation) |
+| Web | URL fetching, browser automation |
+| Memory | Todo/memory management |
+| MCP | 415+ extensions via registry |
+
+> **Note:** Gemini CLI uses `tools.core` (allow-list) or `tools.exclude` (block-list) in config for tool filtering. The `allowedTools` field in agentmux config is ignored for Gemini agents.
+
 **Model resolution**: If an agent has no `model`, it inherits from `defaults.model`. If still empty, no `--model` flag is passed and the backend CLI uses its own default. Model names are not validated at config time — invalid names produce runtime errors from the backend CLI.
 
 **Defaults inheritance**: `ApplyDefaults()` merges global `defaults` into each agent for any unset field: `backend`, `model`, `allowedTools`, `max_turns`. The `workdir` field defaults to `"."` if empty.
