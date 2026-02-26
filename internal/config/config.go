@@ -9,9 +9,10 @@ import (
 
 // Config represents the top-level agentmux configuration.
 type Config struct {
-	Version  int                    `yaml:"version"`
-	Defaults AgentDefaults          `yaml:"defaults"`
-	Agents   map[string]AgentConfig `yaml:"agents"`
+	Version    int                    `yaml:"version"`
+	Defaults   AgentDefaults          `yaml:"defaults"`
+	Agents     map[string]AgentConfig `yaml:"agents"`
+	AgentOrder []string               `yaml:"-"` // preserves YAML key order
 }
 
 // AgentDefaults provides fallback values for agent fields.
@@ -57,6 +58,9 @@ func LoadConfig(path string) (*Config, []string, error) {
 		cfg.Agents = make(map[string]AgentConfig)
 	}
 
+	// Extract agent key order from YAML to preserve config ordering
+	cfg.AgentOrder = extractAgentOrder(data)
+
 	ApplyDefaults(&cfg)
 
 	warnings, err := Validate(&cfg)
@@ -65,6 +69,27 @@ func LoadConfig(path string) (*Config, []string, error) {
 	}
 
 	return &cfg, warnings, nil
+}
+
+// extractAgentOrder parses YAML to preserve the key order of the agents map.
+func extractAgentOrder(data []byte) []string {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 {
+		return nil
+	}
+
+	root := doc.Content[0] // mapping node
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		if root.Content[i].Value == "agents" {
+			agentsNode := root.Content[i+1]
+			order := make([]string, 0, len(agentsNode.Content)/2)
+			for j := 0; j < len(agentsNode.Content)-1; j += 2 {
+				order = append(order, agentsNode.Content[j].Value)
+			}
+			return order
+		}
+	}
+	return nil
 }
 
 // ApplyDefaults merges default values into agents with unset fields.

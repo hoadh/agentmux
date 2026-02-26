@@ -64,6 +64,7 @@ type AgentInfo struct {
 // Manager controls the lifecycle of all agents.
 type Manager struct {
 	agents   map[string]*AgentInfo
+	order    []string // preserves config-defined agent order
 	defaults config.AgentDefaults
 	mu       sync.RWMutex
 }
@@ -74,6 +75,13 @@ func NewManager(defaults config.AgentDefaults) *Manager {
 		agents:   make(map[string]*AgentInfo),
 		defaults: defaults,
 	}
+}
+
+// SetOrder sets the display order for agents (from config).
+func (m *Manager) SetOrder(order []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.order = order
 }
 
 // Register adds an agent to the manager in Pending state.
@@ -164,23 +172,38 @@ func (m *Manager) Restart(name string) (chan tea.Msg, error) {
 	return m.Start(name)
 }
 
-// List returns all agents sorted alphabetically (copies for safe concurrent access).
+// List returns all agents in config-defined order (copies for safe concurrent access).
+// Agents not in the order list (e.g. dynamically spawned) are appended alphabetically.
 func (m *Manager) List() []*AgentInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	names := make([]string, 0, len(m.agents))
-	for name := range m.agents {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	seen := make(map[string]bool, len(m.agents))
+	result := make([]*AgentInfo, 0, len(m.agents))
 
-	result := make([]*AgentInfo, 0, len(names))
-	for _, name := range names {
+	// First: agents in config-defined order
+	for _, name := range m.order {
+		if info, ok := m.agents[name]; ok {
+			cp := *info
+			result = append(result, &cp)
+			seen[name] = true
+		}
+	}
+
+	// Then: any remaining agents (dynamically spawned) sorted alphabetically
+	extras := make([]string, 0)
+	for name := range m.agents {
+		if !seen[name] {
+			extras = append(extras, name)
+		}
+	}
+	sort.Strings(extras)
+	for _, name := range extras {
 		info := m.agents[name]
 		cp := *info
 		result = append(result, &cp)
 	}
+
 	return result
 }
 

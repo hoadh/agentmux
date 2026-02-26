@@ -6,7 +6,10 @@ import (
 )
 
 var (
-	SidebarWidth = 28
+	SidebarMinWidth = 20
+	SidebarMaxWidth = 50
+	// Padding beyond agent name: " ● " prefix (3) + " XXmXXs" duration (8) + truncation margin (3)
+	SidebarPadding = 14
 
 	// Colors
 	AccentColor  = lipgloss.Color("62")
@@ -16,15 +19,13 @@ var (
 	MutedColor   = lipgloss.Color("241")
 	PendingColor = lipgloss.Color("248")
 
-	// Panel styles
+	// Panel styles (width set dynamically via .Width() at render time)
 	SidebarStyle = lipgloss.NewStyle().
-			Width(SidebarWidth).
 			BorderRight(true).
 			BorderStyle(lipgloss.NormalBorder()).
 			BorderForeground(MutedColor)
 
 	SidebarFocusedStyle = lipgloss.NewStyle().
-				Width(SidebarWidth).
 				BorderRight(true).
 				BorderStyle(lipgloss.NormalBorder()).
 				BorderForeground(AccentColor)

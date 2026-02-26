@@ -85,10 +85,11 @@ func (s SidebarModel) View() string {
 
 		line := fmt.Sprintf(" %s %s%s", icon, name, dur)
 
-		// Truncate to width
+		// Truncate to width using rune-aware slicing (multi-byte icons)
 		maxW := s.width - 3
-		if len(line) > maxW && maxW > 0 {
-			line = line[:maxW]
+		runes := []rune(line)
+		if len(runes) > maxW && maxW > 0 {
+			line = string(runes[:maxW])
 		}
 
 		if i == s.cursor {

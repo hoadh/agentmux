@@ -41,6 +41,7 @@ type AppModel struct {
 	logWriter    *agentlog.Writer
 	width        int
 	height       int
+	sidebarWidth int // computed from agent names
 	ready        bool
 	confirmKill  string // agent name pending kill confirmation
 	nextAgentID  int
@@ -58,18 +59,37 @@ func NewApp(mgr *agent.Manager, sched *dag.Scheduler, graph *dag.Graph, ctx cont
 	sb.SetFocusPanel("sidebar")
 
 	return AppModel{
-		sidebar:   sidebar,
-		detail:    NewDetail(),
-		statusbar: sb,
-		spawn:     NewSpawnDialog(),
-		focus:     focusSidebar,
-		manager:   mgr,
-		scheduler: sched,
-		graph:     graph,
-		ctx:       ctx,
-		cancel:    cancel,
-		logWriter: logWriter,
+		sidebar:      sidebar,
+		detail:       NewDetail(),
+		statusbar:    sb,
+		spawn:        NewSpawnDialog(),
+		focus:        focusSidebar,
+		manager:      mgr,
+		scheduler:    sched,
+		graph:        graph,
+		ctx:          ctx,
+		cancel:       cancel,
+		logWriter:    logWriter,
+		sidebarWidth: calcSidebarWidth(agents),
 	}
+}
+
+// calcSidebarWidth computes sidebar width from the longest agent name.
+func calcSidebarWidth(agents []*agent.AgentInfo) int {
+	maxLen := 0
+	for _, a := range agents {
+		if len([]rune(a.Name)) > maxLen {
+			maxLen = len([]rune(a.Name))
+		}
+	}
+	w := maxLen + SidebarPadding
+	if w < SidebarMinWidth {
+		w = SidebarMinWidth
+	}
+	if w > SidebarMaxWidth {
+		w = SidebarMaxWidth
+	}
+	return w
 }
 
 // Init starts the scheduler and arms event listeners.
@@ -425,10 +445,10 @@ func (m AppModel) View() string {
 	if m.focus == focusSidebar {
 		sidebarStyle = SidebarFocusedStyle
 	}
-	sidebar := sidebarStyle.Height(m.height - 3).Render(m.sidebar.View())
+	sidebar := sidebarStyle.Width(m.sidebarWidth).Height(m.height - 3).Render(m.sidebar.View())
 
 	// Detail
-	detailWidth := m.width - SidebarWidth - 2
+	detailWidth := m.width - m.sidebarWidth - 2
 	if detailWidth < 10 {
 		detailWidth = 10
 	}
@@ -454,9 +474,9 @@ func (m AppModel) View() string {
 
 func (m *AppModel) resizeAll() {
 	sidebarH := m.height - 3
-	m.sidebar.SetSize(SidebarWidth, sidebarH)
+	m.sidebar.SetSize(m.sidebarWidth, sidebarH)
 
-	detailW := m.width - SidebarWidth - 2
+	detailW := m.width - m.sidebarWidth - 2
 	if detailW < 10 {
 		detailW = 10
 	}
@@ -467,7 +487,13 @@ func (m *AppModel) resizeAll() {
 }
 
 func (m *AppModel) refreshSidebar() {
-	m.sidebar.Refresh(m.manager.List())
+	agents := m.manager.List()
+	m.sidebar.Refresh(agents)
+	// Recalculate sidebar width if agents were added dynamically
+	if w := calcSidebarWidth(agents); w != m.sidebarWidth {
+		m.sidebarWidth = w
+		m.resizeAll()
+	}
 }
 
 func (m *AppModel) refreshStats() {

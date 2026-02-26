@@ -45,8 +45,9 @@ func runApp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("pipeline error: %w", err)
 	}
 
-	// Create manager and register agents
+	// Create manager and register agents in config order
 	mgr := agent.NewManager(cfg.Defaults)
+	mgr.SetOrder(cfg.AgentOrder)
 	for name, agentCfg := range cfg.Agents {
 		mgr.Register(name, agentCfg)
 	}
