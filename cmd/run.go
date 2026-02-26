@@ -10,21 +10,34 @@ import (
 	_ "github.com/hoadh/agentmux/internal/agent/backend"
 	"github.com/hoadh/agentmux/internal/config"
 	"github.com/hoadh/agentmux/internal/dag"
+	"github.com/hoadh/agentmux/internal/headless"
 	"github.com/hoadh/agentmux/internal/tui"
 	"github.com/spf13/cobra"
 )
 
+var (
+	headlessMode bool
+	outputFormat string
+)
+
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Load config and launch TUI dashboard",
+	Short: "Load config and run pipeline (TUI or headless)",
 	RunE:  runApp,
 }
 
 func init() {
+	runCmd.Flags().BoolVar(&headlessMode, "headless", false, "run pipeline without TUI, streaming events to stdout")
+	runCmd.Flags().StringVar(&outputFormat, "format", "text", "output format: text or ndjson (requires --headless)")
 	rootCmd.AddCommand(runCmd)
 }
 
 func runApp(cmd *cobra.Command, args []string) error {
+	// Validate format flag early before expensive config/DAG work
+	if outputFormat != "text" && outputFormat != "ndjson" {
+		return fmt.Errorf("invalid format %q: must be 'text' or 'ndjson'", outputFormat)
+	}
+
 	cfgPath, _ := cmd.Flags().GetString("config")
 
 	// Load config (optional; empty config = manual-only mode)
@@ -55,10 +68,19 @@ func runApp(cmd *cobra.Command, args []string) error {
 	// Create scheduler
 	sched := dag.NewScheduler(graph, mgr)
 
-	// Create and run TUI
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if headlessMode {
+		opts := headless.Options{Format: outputFormat}
+		runner := headless.New(mgr, sched, opts)
+		if exitCode := runner.Run(ctx, cancel); exitCode != 0 {
+			os.Exit(exitCode)
+		}
+		return nil
+	}
+
+	// TUI mode
 	app := tui.NewApp(mgr, sched, graph, ctx, cancel)
 	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
