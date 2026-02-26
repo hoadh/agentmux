@@ -1,12 +1,12 @@
 # agentmux
 
-A Go TUI for spawning, orchestrating, and monitoring Claude Code agents in parallel via DAG-based pipeline execution and stream-json event streams.
+A Go TUI for spawning, orchestrating, and monitoring AI agents (Claude, Gemini) in parallel via DAG-based pipeline execution and stream-json event streams.
 
 **Version:** v0.1.0 | **Go:** 1.26+ | **License:** MIT
 
 ## Overview
 
-agentmux enables developers to define multi-agent workflows in YAML, execute them with automatic dependency resolution, and observe live progress in an interactive terminal interface. Each agent spawns a Claude Code subprocess, parses NDJSON event streams, and reports state changes to a collaborative TUI dashboard.
+agentmux enables developers to define multi-agent workflows in YAML, execute them with automatic dependency resolution, and observe live progress in an interactive terminal interface. Each agent spawns a CLI subprocess (Claude or Gemini), parses NDJSON event streams, and reports state changes to a collaborative TUI dashboard. Agents in the same pipeline can independently target different backends.
 
 Perfect for:
 - Parallel code generation tasks (scout → planner → coder → tester → reviewer)
@@ -34,11 +34,14 @@ Create `agentmux.yaml`:
 
 ```yaml
 defaults:
+  backend: claude        # Default backend: "claude" or "gemini"
   model: "sonnet"
   max_turns: 10
 
 agents:
   scout:
+    backend: gemini      # Override: use Gemini CLI for this agent
+    model: gemini-2.5-pro
     prompt: "Explore the codebase and summarize."
     max_turns: 5
 
@@ -50,12 +53,6 @@ agents:
     prompt: "Implement the plan."
     depends_on: [planner]
     model: "opus"
-
-pipeline:
-  coder:
-    - planner
-  planner:
-    - scout
 ```
 
 ### Run the Pipeline
@@ -75,9 +72,20 @@ The TUI opens with:
 
 | Section | Purpose |
 |---------|---------|
-| `defaults` | Global defaults: model, max_turns, allowedTools |
-| `agents` | Named agent definitions with prompt, model, tool restrictions |
-| `pipeline` | DAG: each agent lists dependencies (agents that run first) |
+| `defaults` | Global defaults: backend, model, max_turns, allowedTools |
+| `agents` | Named agent definitions with prompt, backend, model, tool restrictions |
+| `depends_on` | DAG: each agent lists dependencies (agents that run first) |
+
+#### Multi-Backend Support
+
+Each agent can target a different CLI backend. Set `backend` at the defaults or agent level:
+
+| Backend | Binary | Notes |
+|---------|--------|-------|
+| `claude` (default) | `claude` | Full support: model, allowedTools, max_turns |
+| `gemini` | `gemini` | Model supported; allowedTools/max_turns ignored (warning emitted) |
+
+Adding a new backend requires only one new Go file with `init()` registration.
 
 See [Config Guide](./docs/configuration.md) for full schema.
 
@@ -100,22 +108,24 @@ agentmux uses a layered architecture:
 
 ```
 CLI (Cobra)
-  ├─> Config (YAML parse)
+  ├─> Config (YAML parse + backend validation)
   ├─> DAG (dependency graph validation)
-  ├─> Manager (agent lifecycle)
+  ├─> Manager (agent lifecycle + backend resolution)
   ├─> Scheduler (event-driven orchestration)
+  ├─> Backend (registry: Claude, Gemini, extensible)
   └─> TUI (Bubbletea composite UI)
-        ├─> Process (subprocess per agent)
-        ├─> Parser (NDJSON stream reader)
+        ├─> Process (subprocess per agent via backend)
+        ├─> Parser (NDJSON stream reader + backend converter)
         └─> Writer (event audit log)
 ```
 
 **Key Features:**
+- **Multi-Backend**: Registry-based abstraction; agents choose Claude or Gemini independently
 - **DAG Scheduling**: Automatic topological sort; acyclicity validation
-- **NDJSON Parsing**: Line-by-line stream consumption; malformed line recovery
+- **NDJSON Parsing**: Line-by-line stream consumption; backend-specific event conversion
 - **Concurrent Safety**: sync.RWMutex for state, sync.Mutex for scheduler critical sections
 - **Batch Event Processing**: Up to 50 events per TUI render cycle for responsiveness
-- **Identity Separation**: Distinct identity and display fields prevent silent log loss
+- **Extensible**: Adding a new backend = 1 new file with `init()` registration
 
 See [System Architecture](./docs/system-architecture.md) for detailed design patterns.
 
@@ -125,14 +135,15 @@ See [System Architecture](./docs/system-architecture.md) for detailed design pat
 cmd/               # CLI entry points (Cobra)
 internal/
   ├── agent/       # Process, parser, manager, state
-  ├── config/      # YAML parsing, validation
+  │   └── backend/ # Backend interface, registry, Claude & Gemini impls
+  ├── config/      # YAML parsing, validation, backend warnings
   ├── dag/         # Graph, scheduler
   ├── log/         # JSONL writer
   └── tui/         # Bubbletea UI components
+examples/          # Pipeline examples (single & mixed backend)
 docs/              # Project documentation
 main.go            # Bootstrap
 go.mod, go.sum     # Dependency management
-agentmux.yaml      # Example config
 ```
 
 ## Documentation
@@ -146,7 +157,9 @@ agentmux.yaml      # Example config
 
 ## Examples
 
-See `agentmux.yaml` for a 5-agent coding pipeline (scout → planner → coder → tester → reviewer).
+- `agentmux.yaml` — 5-agent coding pipeline (scout → planner → coder → tester → reviewer)
+- `examples/parallel-analysis.yaml` — Fan-out/fan-in analysis (scout → 4 parallel → summarizer)
+- `examples/mixed-backend-review.yaml` — Mixed Claude + Gemini pipeline
 
 ## Dependencies
 
