@@ -83,14 +83,13 @@ func (s SidebarModel) View() string {
 			dur = fmt.Sprintf(" %s", formatDuration(info.Duration))
 		}
 
-		line := fmt.Sprintf(" %s %s%s", icon, name, dur)
-
-		// Truncate to width using rune-aware slicing (multi-byte icons)
-		maxW := s.width - 3
-		runes := []rune(line)
-		if len(runes) > maxW && maxW > 0 {
-			line = string(runes[:maxW])
+		// Build line without ANSI codes for width calc, render with icon separately
+		nameWithDur := fmt.Sprintf("%s%s", name, dur)
+		maxNameW := s.width - 5 // margins (1) + icon (1) + space (1) + right pad (2)
+		if maxNameW > 0 && len([]rune(nameWithDur)) > maxNameW {
+			nameWithDur = string([]rune(nameWithDur)[:maxNameW])
 		}
+		line := fmt.Sprintf(" %s %s", icon, nameWithDur)
 
 		if i == s.cursor {
 			line = lipgloss.NewStyle().
