@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoadh/agentmux/internal/agent/backend"
 	"github.com/hoadh/agentmux/internal/config"
 )
 
@@ -99,8 +100,14 @@ func (m *Manager) Start(name string) (chan tea.Msg, error) {
 		return nil, fmt.Errorf("agent %q already running", name)
 	}
 
+	b, err := backend.Get(info.Config.Backend)
+	if err != nil {
+		info.State = StateFailed
+		return nil, fmt.Errorf("agent %q: %w", name, err)
+	}
+
 	proc := NewProcess(name, info.Config, m.defaults)
-	if err := proc.Start(info.Config, m.defaults); err != nil {
+	if err := proc.Start(info.Config, m.defaults, b); err != nil {
 		info.State = StateFailed
 		return nil, fmt.Errorf("start agent %q: %w", name, err)
 	}
@@ -177,11 +184,16 @@ func (m *Manager) List() []*AgentInfo {
 	return result
 }
 
-// Get returns info for a specific agent.
+// Get returns a copy of info for a specific agent.
 func (m *Manager) Get(name string) *AgentInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.agents[name]
+	info, ok := m.agents[name]
+	if !ok {
+		return nil
+	}
+	cp := *info
+	return &cp
 }
 
 // SetState updates agent state (used by scheduler).

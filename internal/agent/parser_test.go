@@ -6,17 +6,20 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoadh/agentmux/internal/agent/backend"
 )
 
+// Use the Claude backend converter for existing tests
+var claudeConvert = (&backend.Claude{}).ConvertEvent
+
 func TestParseStream_AssistantEvent(t *testing.T) {
-	// Real format: content is an array of blocks with type field
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"text","text":"Hello, world!"}]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(AssistantEvent)
+	event, ok := msg.(backend.AssistantEvent)
 	if !ok {
 		t.Fatalf("expected AssistantEvent, got %T", msg)
 	}
@@ -30,16 +33,14 @@ func TestParseStream_AssistantEvent(t *testing.T) {
 	}
 }
 
-
 func TestParseStream_ToolUseEvent(t *testing.T) {
-	// Real format: tool_use is inside assistant message.content array as a block
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/file.txt"}}]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ToolUseEvent)
+	event, ok := msg.(backend.ToolUseEvent)
 	if !ok {
 		t.Fatalf("expected ToolUseEvent, got %T", msg)
 	}
@@ -58,14 +59,13 @@ func TestParseStream_ToolUseEvent(t *testing.T) {
 }
 
 func TestParseStream_ToolResultEvent(t *testing.T) {
-	// Real format: tool_result is inside assistant message.content array as a block
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"tool_result","content":"File contents here"}]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ToolResultEvent)
+	event, ok := msg.(backend.ToolResultEvent)
 	if !ok {
 		t.Fatalf("expected ToolResultEvent, got %T", msg)
 	}
@@ -83,10 +83,10 @@ func TestParseStream_ResultEvent(t *testing.T) {
 	ndjson := `{"type":"result","result":"Task completed","session_id":"sess-123","usage":{"input_tokens":100,"output_tokens":50}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ResultEvent)
+	event, ok := msg.(backend.ResultEvent)
 	if !ok {
 		t.Fatalf("expected ResultEvent, got %T", msg)
 	}
@@ -116,7 +116,7 @@ func TestParseStream_UnknownType(t *testing.T) {
 	ndjson := `{"type":"unknown","data":"something"}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -129,11 +129,10 @@ func TestParseStream_UnknownType(t *testing.T) {
 }
 
 func TestParseStream_SystemEvent_Skipped(t *testing.T) {
-	// System events should be skipped and return nil
 	ndjson := `{"type":"system","subtype":"init","cwd":"/path","session_id":"sess-123","tools":[]}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -141,16 +140,15 @@ func TestParseStream_SystemEvent_Skipped(t *testing.T) {
 			t.Fatalf("expected no message for system event, got %T", msg)
 		}
 	case <-time.After(100 * time.Millisecond):
-		// Expected: system event skipped, no message sent
+		// Expected: system event skipped
 	}
 }
 
 func TestParseStream_RateLimitEvent_Skipped(t *testing.T) {
-	// rate_limit_event should be skipped and return nil
 	ndjson := `{"type":"rate_limit_event","rate_limit_tokens_remaining":1000}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -158,7 +156,7 @@ func TestParseStream_RateLimitEvent_Skipped(t *testing.T) {
 			t.Fatalf("expected no message for rate_limit_event, got %T", msg)
 		}
 	case <-time.After(100 * time.Millisecond):
-		// Expected: rate_limit_event skipped, no message sent
+		// Expected: rate_limit_event skipped
 	}
 }
 
@@ -166,7 +164,7 @@ func TestParseStream_MalformedJSON(t *testing.T) {
 	ndjson := `{"type":"assistant","message":invalid json`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case <-ch:
@@ -177,14 +175,13 @@ func TestParseStream_MalformedJSON(t *testing.T) {
 }
 
 func TestParseStream_MultipleEvents(t *testing.T) {
-	// Real format: separate assistant messages for text, tool_use, tool_result, then result
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_result","content":"file1.txt"}]}}
 {"type":"result","result":"Done","session_id":"s1","usage":{"input_tokens":10,"output_tokens":5}}`
 
 	ch := make(chan tea.Msg, 4)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	events := make([]tea.Msg, 0, 4)
 	for i := 0; i < 4; i++ {
@@ -202,10 +199,10 @@ func TestParseStream_MultipleEvents(t *testing.T) {
 		t.Fatalf("expected 4 events, got %d", len(events))
 	}
 
-	_, ok1 := events[0].(AssistantEvent)
-	_, ok2 := events[1].(ToolUseEvent)
-	_, ok3 := events[2].(ToolResultEvent)
-	_, ok4 := events[3].(ResultEvent)
+	_, ok1 := events[0].(backend.AssistantEvent)
+	_, ok2 := events[1].(backend.ToolUseEvent)
+	_, ok3 := events[2].(backend.ToolResultEvent)
+	_, ok4 := events[3].(backend.ResultEvent)
 
 	if !ok1 || !ok2 || !ok3 || !ok4 {
 		t.Fatal("event types do not match expected sequence")
@@ -216,7 +213,7 @@ func TestParseStream_EmptyInput(t *testing.T) {
 	ndjson := ""
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -229,20 +226,18 @@ func TestParseStream_EmptyInput(t *testing.T) {
 }
 
 func TestParseStream_ToolUseInputTruncation(t *testing.T) {
-	// Create a long input JSON
 	longInput := strings.Repeat("x", 500)
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"data":"` + longInput + `"}}]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ToolUseEvent)
+	event, ok := msg.(backend.ToolUseEvent)
 	if !ok {
 		t.Fatalf("expected ToolUseEvent, got %T", msg)
 	}
 
-	// The truncate function adds "... (N more)" which extends the length
 	if len(event.Input) <= 120 {
 		t.Errorf("Input should be longer than 120 (includes truncation marker), got %d", len(event.Input))
 	}
@@ -253,20 +248,18 @@ func TestParseStream_ToolUseInputTruncation(t *testing.T) {
 }
 
 func TestParseStream_ToolResultTruncation(t *testing.T) {
-	// Create a long result
 	longContent := strings.Repeat("x", 500)
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"tool_result","content":"` + longContent + `"}]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ToolResultEvent)
+	event, ok := msg.(backend.ToolResultEvent)
 	if !ok {
 		t.Fatalf("expected ToolResultEvent, got %T", msg)
 	}
 
-	// truncate(s, 200) returns s[:200] + "... (N more)" suffix
 	if len(event.Content) > 230 {
 		t.Errorf("Content should be truncated (200 + suffix), got %d", len(event.Content))
 	}
@@ -280,7 +273,7 @@ func TestParseStream_NoType(t *testing.T) {
 	ndjson := `{"message":{"content":{"text":"Hello"}}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -293,11 +286,10 @@ func TestParseStream_NoType(t *testing.T) {
 }
 
 func TestParseStream_PartialData(t *testing.T) {
-	// Missing optional fields - assistant without content array
 	ndjson := `{"type":"assistant","message":{"content":[]}}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	select {
 	case msg := <-ch:
@@ -313,10 +305,10 @@ func TestParseStream_ResultMissingUsage(t *testing.T) {
 	ndjson := `{"type":"result","result":"Done","session_id":"s1"}`
 
 	ch := make(chan tea.Msg, 1)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	msg := <-ch
-	event, ok := msg.(ResultEvent)
+	event, ok := msg.(backend.ResultEvent)
 	if !ok {
 		t.Fatalf("expected ResultEvent, got %T", msg)
 	}
@@ -331,13 +323,12 @@ func TestParseStream_ResultMissingUsage(t *testing.T) {
 }
 
 func TestParseStream_MixedValidAndInvalid(t *testing.T) {
-	// Valid, invalid, and valid again - parser should skip invalid line and continue
 	ndjson := `{"type":"assistant","message":{"content":[{"type":"text","text":"Hello"}]}}
 {"invalid json here
 {"type":"assistant","message":{"content":[{"type":"tool_result","content":"Result"}]}}`
 
 	ch := make(chan tea.Msg, 2)
-	go ParseStream("agent1", strings.NewReader(ndjson), ch)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, claudeConvert)
 
 	events := make([]tea.Msg, 0, 2)
 	for i := 0; i < 2; i++ {
@@ -351,15 +342,37 @@ func TestParseStream_MixedValidAndInvalid(t *testing.T) {
 		}
 	}
 
-	// Should have 2 valid events (malformed line skipped)
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events (malformed lines skipped), got %d", len(events))
 	}
 
-	_, ok1 := events[0].(AssistantEvent)
-	_, ok2 := events[1].(ToolResultEvent)
+	_, ok1 := events[0].(backend.AssistantEvent)
+	_, ok2 := events[1].(backend.ToolResultEvent)
 
 	if !ok1 || !ok2 {
 		t.Fatal("event types do not match expected sequence")
+	}
+}
+
+func TestParseStream_MockConverter(t *testing.T) {
+	ndjson := `{"type":"custom","data":"test"}`
+
+	mockConvert := func(agentName string, raw map[string]any) tea.Msg {
+		if raw["type"] == "custom" {
+			return backend.AssistantEvent{AgentName: agentName, Text: "mock"}
+		}
+		return nil
+	}
+
+	ch := make(chan tea.Msg, 1)
+	go ParseStream("agent1", strings.NewReader(ndjson), ch, mockConvert)
+
+	msg := <-ch
+	event, ok := msg.(backend.AssistantEvent)
+	if !ok {
+		t.Fatalf("expected AssistantEvent from mock, got %T", msg)
+	}
+	if event.Text != "mock" {
+		t.Errorf("Text: got %q, want %q", event.Text, "mock")
 	}
 }

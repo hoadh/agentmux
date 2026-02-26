@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hoadh/agentmux/internal/agent"
+	"github.com/hoadh/agentmux/internal/agent/backend"
 	"github.com/hoadh/agentmux/internal/config"
 	"github.com/hoadh/agentmux/internal/dag"
 	agentlog "github.com/hoadh/agentmux/internal/log"
@@ -145,7 +146,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	// Agent events (single)
-	case agent.AssistantEvent:
+	case backend.AssistantEvent:
 		m.detail.AppendLine(msg.AgentName, msg.Text)
 		m.manager.UpdateLastEvent(msg.AgentName, "writing...")
 		m.manager.UpdateDuration(msg.AgentName)
@@ -154,7 +155,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
-	case agent.ToolUseEvent:
+	case backend.ToolUseEvent:
 		line := fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input)
 		m.detail.AppendEvent(msg.AgentName, line)
 		m.manager.UpdateLastEvent(msg.AgentName, fmt.Sprintf("Tool: %s", msg.ToolName))
@@ -164,14 +165,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
-	case agent.ToolResultEvent:
+	case backend.ToolResultEvent:
 		line := fmt.Sprintf("  ← %s", msg.Content)
 		m.detail.AppendEvent(msg.AgentName, line)
 		m.logEvent(msg.AgentName, msg)
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
-	case agent.ResultEvent:
+	case backend.ResultEvent:
 		line := fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens)
 		m.detail.AppendEvent(msg.AgentName, line)
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
@@ -181,7 +182,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
-	case agent.AgentDoneEvent:
+	case backend.AgentDoneEvent:
 		m.manager.UpdateDuration(msg.AgentName)
 		if msg.ExitCode != 0 {
 			m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
@@ -192,7 +193,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
-	case agent.ErrorEvent:
+	case backend.ErrorEvent:
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
 		m.logEvent(msg.AgentName, msg)
 		cmds = append(cmds, m.rearmScheduler())
@@ -377,30 +378,30 @@ func (m *AppModel) handleSpawnConfirm(msg SpawnConfirmMsg) (tea.Model, tea.Cmd) 
 // processAgentEvent handles a single agent/scheduler event without refreshing sidebar.
 func (m *AppModel) processAgentEvent(evt tea.Msg) {
 	switch msg := evt.(type) {
-	case agent.AssistantEvent:
+	case backend.AssistantEvent:
 		m.detail.AppendLine(msg.AgentName, msg.Text)
 		m.manager.UpdateLastEvent(msg.AgentName, "writing...")
 		m.manager.UpdateDuration(msg.AgentName)
 		m.logEvent(msg.AgentName, msg)
-	case agent.ToolUseEvent:
+	case backend.ToolUseEvent:
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input))
 		m.manager.UpdateLastEvent(msg.AgentName, fmt.Sprintf("Tool: %s", msg.ToolName))
 		m.manager.UpdateDuration(msg.AgentName)
 		m.logEvent(msg.AgentName, msg)
-	case agent.ToolResultEvent:
+	case backend.ToolResultEvent:
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("  ← %s", msg.Content))
 		m.logEvent(msg.AgentName, msg)
-	case agent.ResultEvent:
+	case backend.ResultEvent:
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens))
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
 		m.logEvent(msg.AgentName, msg)
-	case agent.AgentDoneEvent:
+	case backend.AgentDoneEvent:
 		m.manager.UpdateDuration(msg.AgentName)
 		if msg.ExitCode != 0 {
 			m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
 		}
 		m.logEvent(msg.AgentName, msg)
-	case agent.ErrorEvent:
+	case backend.ErrorEvent:
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
 		m.logEvent(msg.AgentName, msg)
 	case dag.AgentStartedMsg:

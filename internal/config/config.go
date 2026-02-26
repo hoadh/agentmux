@@ -16,6 +16,7 @@ type Config struct {
 
 // AgentDefaults provides fallback values for agent fields.
 type AgentDefaults struct {
+	Backend      string   `yaml:"backend"`
 	Model        string   `yaml:"model"`
 	AllowedTools []string `yaml:"allowedTools"`
 	MaxTurns     int      `yaml:"max_turns"`
@@ -23,6 +24,7 @@ type AgentDefaults struct {
 
 // AgentConfig defines a single agent's configuration.
 type AgentConfig struct {
+	Backend      string   `yaml:"backend"`
 	Prompt       string   `yaml:"prompt"`
 	WorkDir      string   `yaml:"workdir"`
 	Model        string   `yaml:"model"`
@@ -40,15 +42,15 @@ func DefaultConfig() *Config {
 }
 
 // LoadConfig reads and parses a YAML config file.
-func LoadConfig(path string) (*Config, error) {
+func LoadConfig(path string) (*Config, []string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, nil, fmt.Errorf("read config: %w", err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		return nil, nil, fmt.Errorf("parse config: %w", err)
 	}
 
 	if cfg.Agents == nil {
@@ -57,16 +59,20 @@ func LoadConfig(path string) (*Config, error) {
 
 	ApplyDefaults(&cfg)
 
-	if err := Validate(&cfg); err != nil {
-		return nil, err
+	warnings, err := Validate(&cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return &cfg, nil
+	return &cfg, warnings, nil
 }
 
 // ApplyDefaults merges default values into agents with unset fields.
 func ApplyDefaults(cfg *Config) {
 	for name, agent := range cfg.Agents {
+		if agent.Backend == "" {
+			agent.Backend = cfg.Defaults.Backend
+		}
 		if agent.Model == "" {
 			agent.Model = cfg.Defaults.Model
 		}
@@ -84,19 +90,32 @@ func ApplyDefaults(cfg *Config) {
 }
 
 // Validate checks config for required fields and dependency integrity.
-func Validate(cfg *Config) error {
+// Returns warnings for non-fatal issues (e.g. unsupported backend features).
+func Validate(cfg *Config) ([]string, error) {
+	var warnings []string
 	for name, agent := range cfg.Agents {
 		if agent.Prompt == "" {
-			return fmt.Errorf("agent %q: prompt is required", name)
+			return nil, fmt.Errorf("agent %q: prompt is required", name)
 		}
 		for _, dep := range agent.DependsOn {
 			if dep == name {
-				return fmt.Errorf("agent %q: cannot depend on itself", name)
+				return nil, fmt.Errorf("agent %q: cannot depend on itself", name)
 			}
 			if _, ok := cfg.Agents[dep]; !ok {
-				return fmt.Errorf("agent %q: unknown dependency %q", name, dep)
+				return nil, fmt.Errorf("agent %q: unknown dependency %q", name, dep)
+			}
+		}
+		// Backend-specific warnings
+		if agent.Backend == "gemini" {
+			if len(agent.AllowedTools) > 0 {
+				warnings = append(warnings, fmt.Sprintf(
+					"agent %q: allowedTools ignored for gemini backend", name))
+			}
+			if agent.MaxTurns > 0 {
+				warnings = append(warnings, fmt.Sprintf(
+					"agent %q: max_turns ignored for gemini backend", name))
 			}
 		}
 	}
-	return nil
+	return warnings, nil
 }

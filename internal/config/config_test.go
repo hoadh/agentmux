@@ -8,7 +8,7 @@ import (
 
 func TestLoadConfig_Valid(t *testing.T) {
 	path := filepath.Join("testdata", "valid.yaml")
-	cfg, err := LoadConfig(path)
+	cfg, _, err := LoadConfig(path)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestLoadConfig_Valid(t *testing.T) {
 }
 
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := LoadConfig("nonexistent.yaml")
+	_, _, err := LoadConfig("nonexistent.yaml")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}
@@ -47,7 +47,7 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 
 func TestLoadConfig_MissingPrompt(t *testing.T) {
 	path := filepath.Join("testdata", "missing_prompt.yaml")
-	_, err := LoadConfig(path)
+	_, _, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error for missing prompt")
 	}
@@ -55,7 +55,7 @@ func TestLoadConfig_MissingPrompt(t *testing.T) {
 
 func TestLoadConfig_UnknownDependency(t *testing.T) {
 	path := filepath.Join("testdata", "unknown_dep.yaml")
-	_, err := LoadConfig(path)
+	_, _, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error for unknown dependency")
 	}
@@ -63,7 +63,7 @@ func TestLoadConfig_UnknownDependency(t *testing.T) {
 
 func TestLoadConfig_SelfDependency(t *testing.T) {
 	path := filepath.Join("testdata", "self_dep.yaml")
-	_, err := LoadConfig(path)
+	_, _, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error for self-dependency")
 	}
@@ -157,7 +157,7 @@ func TestValidate_Valid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg)
+	_, err := Validate(cfg)
 	if err != nil {
 		t.Fatalf("Validate failed: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestValidate_MissingPrompt(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg)
+	_, err := Validate(cfg)
 	if err == nil {
 		t.Fatal("expected error for missing prompt")
 	}
@@ -190,7 +190,7 @@ func TestValidate_UnknownDependency(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg)
+	_, err := Validate(cfg)
 	if err == nil {
 		t.Fatal("expected error for unknown dependency")
 	}
@@ -207,7 +207,7 @@ func TestValidate_SelfDependency(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg)
+	_, err := Validate(cfg)
 	if err == nil {
 		t.Fatal("expected error for self-dependency")
 	}
@@ -219,7 +219,7 @@ func TestValidate_EmptyConfig(t *testing.T) {
 		Agents:  make(map[string]AgentConfig),
 	}
 
-	err := Validate(cfg)
+	_, err := Validate(cfg)
 	if err != nil {
 		t.Fatalf("Validate should accept empty config: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestLoadConfig_DefaultsMerging(t *testing.T) {
 	path := filepath.Join("testdata", "defaults_merging.yaml")
-	cfg, err := LoadConfig(path)
+	cfg, _, err := LoadConfig(path)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -269,6 +269,96 @@ func TestLoadConfig_DefaultsMerging(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_MixedBackend(t *testing.T) {
+	path := filepath.Join("testdata", "mixed_backend.yaml")
+	cfg, warnings, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	researcher := cfg.Agents["researcher"]
+	if researcher.Backend != "gemini" {
+		t.Errorf("researcher backend: got %q, want %q", researcher.Backend, "gemini")
+	}
+
+	implementer := cfg.Agents["implementer"]
+	if implementer.Backend != "claude" {
+		t.Errorf("implementer backend: got %q, want %q", implementer.Backend, "claude")
+	}
+
+	// 1 warning: researcher (gemini) inherits max_turns=10 from defaults
+	if len(warnings) != 1 {
+		t.Errorf("expected 1 warning, got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestApplyDefaults_Backend(t *testing.T) {
+	cfg := &Config{
+		Version: 1,
+		Defaults: AgentDefaults{
+			Backend: "claude",
+			Model:   "sonnet",
+		},
+		Agents: map[string]AgentConfig{
+			"agent1": {Prompt: "Task 1"},
+			"agent2": {Prompt: "Task 2", Backend: "gemini"},
+		},
+	}
+
+	ApplyDefaults(cfg)
+
+	if cfg.Agents["agent1"].Backend != "claude" {
+		t.Errorf("agent1 backend: got %q, want %q", cfg.Agents["agent1"].Backend, "claude")
+	}
+	if cfg.Agents["agent2"].Backend != "gemini" {
+		t.Errorf("agent2 backend: got %q, want %q", cfg.Agents["agent2"].Backend, "gemini")
+	}
+}
+
+func TestValidate_GeminiWarnings(t *testing.T) {
+	cfg := &Config{
+		Version: 1,
+		Agents: map[string]AgentConfig{
+			"agent1": {
+				Prompt:       "Task 1",
+				Backend:      "gemini",
+				AllowedTools: []string{"Read"},
+				MaxTurns:     10,
+			},
+		},
+	}
+
+	warnings, err := Validate(cfg)
+	if err != nil {
+		t.Fatalf("Validate error: %v", err)
+	}
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestValidate_ClaudeNoWarnings(t *testing.T) {
+	cfg := &Config{
+		Version: 1,
+		Agents: map[string]AgentConfig{
+			"agent1": {
+				Prompt:       "Task 1",
+				Backend:      "claude",
+				AllowedTools: []string{"Read"},
+				MaxTurns:     10,
+			},
+		},
+	}
+
+	warnings, err := Validate(cfg)
+	if err != nil {
+		t.Fatalf("Validate error: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("expected 0 warnings for claude, got %d: %v", len(warnings), warnings)
+	}
+}
+
 func TestLoadConfig_NilAgentsMap(t *testing.T) {
 	// Create a temporary config file with no agents
 	tmpfile, err := os.CreateTemp("", "config-*.yaml")
@@ -283,7 +373,7 @@ func TestLoadConfig_NilAgentsMap(t *testing.T) {
 	}
 	tmpfile.Close()
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, _, err := LoadConfig(tmpfile.Name())
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}

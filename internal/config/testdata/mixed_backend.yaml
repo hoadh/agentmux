@@ -1,0 +1,17 @@
+version: 1
+
+defaults:
+  backend: claude
+  model: sonnet
+  max_turns: 10
+
+agents:
+  researcher:
+    backend: gemini
+    model: gemini-2.5-pro
+    prompt: "Research the codebase"
+  implementer:
+    backend: claude
+    model: opus
+    prompt: "Implement the feature"
+    depends_on: [researcher]

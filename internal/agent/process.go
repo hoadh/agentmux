@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hoadh/agentmux/internal/agent/backend"
 	"github.com/hoadh/agentmux/internal/config"
 )
 
-// Process wraps an os/exec command for a claude CLI agent.
+// Process wraps an os/exec command for a CLI agent.
 type Process struct {
 	Name     string
 	Cmd      *exec.Cmd
@@ -38,13 +38,26 @@ func NewProcess(name string, cfg config.AgentConfig, defaults config.AgentDefaul
 	}
 }
 
-// Start launches the claude CLI process and begins parsing output.
-func (p *Process) Start(cfg config.AgentConfig, defaults config.AgentDefaults) error {
+// Start launches the CLI process and begins parsing output.
+func (p *Process) Start(cfg config.AgentConfig, defaults config.AgentDefaults, b backend.Backend) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
 
-	args := buildArgs(cfg, defaults)
-	p.Cmd = exec.CommandContext(ctx, "claude", args...)
+	model := cfg.Model
+	if model == "" {
+		model = defaults.Model
+	}
+	tools := cfg.AllowedTools
+	if len(tools) == 0 {
+		tools = defaults.AllowedTools
+	}
+	maxTurns := cfg.MaxTurns
+	if maxTurns == 0 {
+		maxTurns = defaults.MaxTurns
+	}
+
+	args := b.BuildArgs(cfg.Prompt, model, tools, maxTurns)
+	p.Cmd = exec.CommandContext(ctx, b.Binary(), args...)
 	p.Cmd.Dir = cfg.WorkDir
 
 	var err error
@@ -62,11 +75,11 @@ func (p *Process) Start(cfg config.AgentConfig, defaults config.AgentDefaults) e
 
 	if err := p.Cmd.Start(); err != nil {
 		cancel()
-		return fmt.Errorf("start claude: %w", err)
+		return fmt.Errorf("start %s: %w", b.Name(), err)
 	}
 
 	// Parse stdout NDJSON in goroutine
-	go ParseStream(p.Name, p.Stdout, p.EventCh)
+	go ParseStream(p.Name, p.Stdout, p.EventCh, b.ConvertEvent)
 
 	// Drain stderr in goroutine
 	go func() {
@@ -91,7 +104,7 @@ func (p *Process) Start(cfg config.AgentConfig, defaults config.AgentDefaults) e
 		p.exitCode = code
 		p.mu.Unlock()
 		select {
-		case p.EventCh <- AgentDoneEvent{AgentName: p.Name, ExitCode: code}:
+		case p.EventCh <- backend.AgentDoneEvent{AgentName: p.Name, ExitCode: code}:
 		default:
 		}
 		close(p.done)
@@ -134,37 +147,4 @@ func (p *Process) StderrOutput() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.stderr.String()
-}
-
-// buildArgs constructs CLI arguments for the claude command.
-func buildArgs(cfg config.AgentConfig, defaults config.AgentDefaults) []string {
-	args := []string{"-p", cfg.Prompt, "--output-format", "stream-json", "--verbose"}
-
-	model := cfg.Model
-	if model == "" {
-		model = defaults.Model
-	}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-
-	tools := cfg.AllowedTools
-	if len(tools) == 0 {
-		tools = defaults.AllowedTools
-	}
-	if len(tools) > 0 {
-		for _, t := range tools {
-			args = append(args, "--allowedTools", t)
-		}
-	}
-
-	maxTurns := cfg.MaxTurns
-	if maxTurns == 0 {
-		maxTurns = defaults.MaxTurns
-	}
-	if maxTurns > 0 {
-		args = append(args, "--max-turns", strconv.Itoa(maxTurns))
-	}
-
-	return args
 }

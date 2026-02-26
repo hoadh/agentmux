@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hoadh/agentmux/internal/agent"
+	"github.com/hoadh/agentmux/internal/agent/backend"
 )
 
 // Scheduler events sent to the TUI.
@@ -97,7 +98,7 @@ func (s *Scheduler) startAgent(name string, agentEvents chan tea.Msg) {
 		s.mu.Lock()
 		s.status[name] = agent.StateFailed
 		s.mu.Unlock()
-		s.eventCh <- agent.ErrorEvent{AgentName: name, Err: err}
+		s.eventCh <- backend.ErrorEvent{AgentName: name, Err: err}
 		// Block downstream outside lock
 		s.mu.Lock()
 		blocked := s.collectBlocked(name)
@@ -123,7 +124,7 @@ func (s *Scheduler) startAgent(name string, agentEvents chan tea.Msg) {
 }
 
 func (s *Scheduler) handleEvent(msg tea.Msg, agentEvents chan tea.Msg) {
-	done, ok := msg.(agent.AgentDoneEvent)
+	done, ok := msg.(backend.AgentDoneEvent)
 	if !ok {
 		return
 	}
