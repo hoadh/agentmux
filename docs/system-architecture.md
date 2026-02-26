@@ -2,7 +2,7 @@
 
 ## Overview
 
-Agentmux is a Go TUI application for spawning, monitoring, and orchestrating Claude Code agents in parallel using DAG pipelines. The system enables users to define agent workflows in YAML, execute them with dependency management, and observe live progress through a terminal interface.
+Agentmux is a Go TUI application for spawning, monitoring, and orchestrating AI agents (Claude, Gemini) in parallel using DAG pipelines. The system enables users to define agent workflows in YAML, execute them with dependency management, and observe live progress through a terminal interface or headless output.
 
 **Module:** `github.com/hoadh/agentmux`
 **Go Version:** 1.24.2+
@@ -28,9 +28,9 @@ Cobra provides hierarchical command structure and flag parsing.
 
 Core agent lifecycle and process management.
 
-- **process.go** (151 LOC): `Process` spawns subprocess with configurable working directory, environment, and command; manages stdin/stdout/stderr pipes; graceful SIGTERM → SIGKILL shutdown
+- **process.go** (150 LOC): `Process` spawns subprocess with configurable working directory, environment, and command; manages stdin/stdout/stderr pipes; graceful SIGTERM → SIGKILL shutdown
 - **parser.go** (32 LOC): Consumes Process stdout line-by-line using bufio.Scanner; backend-agnostic via EventConverter pattern; handles malformed lines gracefully
-- **manager.go** (282 LOC): `Manager` tracks agent state machine (`Pending → Running → Done|Failed|Killed|Blocked`); holds token usage, logs, and exit codes; uses `sync.RWMutex` for concurrent access; BatchEvents for TUI efficiency
+- **manager.go** (304 LOC): `Manager` tracks agent state machine (`Pending → Running → Done|Failed|Killed|Blocked`); holds token usage, logs, and exit codes; uses `sync.RWMutex` for concurrent access; BatchEvents for TUI efficiency
 - **backend/** (297 LOC): Backend interface + registry; Claude and Gemini CLI implementations with event type mapping
 
 **Key Feature**: Multi-backend support — each agent independently targets Claude or Gemini CLI via registry pattern with `init()` self-registration.
@@ -46,16 +46,23 @@ Event-driven dependency orchestration.
 
 Bubbletea composite model for interactive terminal UI.
 
-- **app.go** (593 LOC): Root `AppModel` orchestrates sidebar, detail, statusbar, spawn modal; handles focus switching; event routing to children
-- **sidebar.go** (137 LOC): Agent list with state indicators (●=running, ✓=done, ✗=failed); Vim-style nav (j/k)
-- **detail.go** (218 LOC): Scrollable log viewer for selected agent; 10k-line ring buffer; auto-scroll with manual override
-- **statusbar.go** (90 LOC): Progress counters and mode-specific keybinding hints
-- **spawn.go** (124 LOC): Modal dialog for manual agent spawning with text inputs
-- **styles.go** (82 LOC): Centralized Lipgloss palette; state icons; borders and spacing
+- **app.go** (622 LOC): Root `AppModel` orchestrates sidebar, detail, statusbar, spawn modal; handles focus switching; event routing to children
+- **sidebar.go** (153 LOC): Agent list with state indicators (●=running, ✓=done, ✗=failed); Vim-style nav (j/k)
+- **detail.go** (222 LOC): Scrollable log viewer for selected agent; 10k-line ring buffer; auto-scroll with manual override
+- **statusbar.go** (89 LOC): Progress counters and mode-specific keybinding hints
+- **spawn.go** (123 LOC): Modal dialog for manual agent spawning with text inputs
+- **styles.go** (83 LOC): Centralized Lipgloss palette; state icons; borders and spacing
 
 **Design Pattern**: Identity vs Display Separation — `agentName` (identity for event matching) separate from `headerText` (formatted display string).
 
-### 6. Logging (`internal/log/`)
+### 6. Headless Runner (`internal/headless/`)
+
+Non-TUI pipeline execution for CI/CD and scripted workflows.
+
+- **runner.go** (160 LOC): Orchestrates pipeline without TUI; signal handling (SIGINT/SIGTERM); polls agent events and formats output to stdout; exit codes reflect pipeline success/failure
+- **formatter.go** (113 LOC): Text and NDJSON output formatters; text produces human-readable timestamped lines; NDJSON produces one JSON object per line for machine consumption
+
+### 7. Logging (`internal/log/`)
 
 - **writer.go** (77 LOC): Thread-safe JSONL event appender; lazy file creation per agent; audit trail to `~/.agentmux/logs/`
 
@@ -137,21 +144,24 @@ Critical pattern for TUI model correctness:
 
 ```
 CLI (Cobra)
-  ├─> Config (YAML parse)
+  ├─> Config (YAML parse + backend validation)
   ├─> Graph (DAG validation & topo sort)
   ├─> Manager (state tracking)
   ├─> Scheduler (dependency orchestration)
-  └─> TUI (Bubbletea root)
-        ├─> Sidebar (agent list)
-        ├─> Detail (logs)
-        ├─> StatusBar (progress)
-        └─> Spawn (manual trigger)
-             ├─> Process (subprocess per agent)
+  ├─> TUI (Bubbletea root)        ← default mode
+  │     ├─> Sidebar (agent list)
+  │     ├─> Detail (logs)
+  │     ├─> StatusBar (progress)
+  │     └─> Spawn (manual trigger)
+  └─> Headless (Runner)            ← --headless mode
+        ├─> Text/NDJSON formatters
+        └─> Signal handling (graceful shutdown)
+             ├─> Process (subprocess per agent via backend)
              ├─> Parser (NDJSON reader)
              └─> Writer (JSONL audit log)
 ```
 
-Each agent's Process spawns a subprocess and reads NDJSON output asynchronously. The Scheduler monitors completion and signals ready dependents. The TUI subscribes to manager events and updates display in real-time.
+Each agent's Process spawns a subprocess and reads NDJSON output asynchronously. The Scheduler monitors completion and signals ready dependents. In TUI mode, the UI subscribes to manager events for real-time display. In headless mode, the Runner polls events and streams formatted output to stdout.
 
 ## Concurrency Model
 
@@ -171,28 +181,28 @@ Each agent's Process spawns a subprocess and reads NDJSON output asynchronously.
 YAML structure:
 ```yaml
 defaults:
+  backend: "claude"
   model: "sonnet"
   max_turns: 10
+  allowedTools:
+    - "Read"
+    - "Write"
 
 agents:
   agent_name:
+    backend: "gemini"
     prompt: "Task description"
-    model: "sonnet"
+    model: "gemini-2.5-pro"
     max_turns: 5
-    allowed_tools:
-      - "Read"
-      - "Write"
-
-pipeline:
-  dependent_agent:
-    - dependency_1
-    - dependency_2
+    allowedTools:
+      - "Bash"
+    depends_on:
+      - dependency_1
+      - dependency_2
 ```
 
-**Defaults Section**: Global defaults for model, max_turns, and other agent parameters.
+**Defaults Section**: Global defaults for backend, model, max_turns, and allowedTools. Merged into each agent via `ApplyDefaults()`.
 
-**Agents Section**: Individual agent definitions with prompt, model override, tool restrictions.
+**Agents Section**: Individual agent definitions with prompt, backend override, model, tool restrictions, and DAG dependencies (`depends_on`).
 
-**Pipeline Section**: DAG definition where each agent lists its dependencies (agents that must complete before it starts).
-
-The Config package parses this into typed structs for downstream validation and use.
+The Config package parses this into typed structs (`Config`, `AgentDefaults`, `AgentConfig`) for downstream validation and use. See [Configuration Guide](./configuration.md) for full reference.
