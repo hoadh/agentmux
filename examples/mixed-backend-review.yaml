@@ -1,0 +1,65 @@
+version: 1
+
+# Mixed Backend Code Review Pipeline
+# Demonstrates multi-backend support:
+#   Gemini scouts → Claude analyzes → Gemini summarizes
+#
+# Uses Gemini for fast exploration and Claude for deep analysis.
+# Agents with backend: gemini use Gemini CLI; others use Claude.
+
+defaults:
+  backend: claude
+  model: sonnet
+  allowedTools: ["Read", "Write", "Glob", "Grep", "Bash"]
+  max_turns: 10
+
+agents:
+  scout:
+    backend: gemini
+    model: gemini-2.5-pro
+    prompt: |
+      Explore the codebase quickly. Map the project structure,
+      identify the tech stack, key entry points, and all source files.
+      Write a brief inventory to CODEBASE_MAP.md so other agents
+      can reference it without re-scanning.
+    max_turns: 5
+
+  # --- These 2 agents run in parallel after scout (Claude for deep analysis) ---
+
+  architecture-review:
+    prompt: |
+      Read CODEBASE_MAP.md. Perform a deep architecture review:
+      - Evaluate package/module boundaries and coupling
+      - Check for circular dependencies or import tangles
+      - Assess error handling patterns and consistency
+      - Review concurrency patterns (goroutines, channels, mutexes)
+      - Identify abstraction leaks or god objects
+      Write findings to ARCHITECTURE_REPORT.md with specific file:line refs.
+    depends_on: [scout]
+
+  code-quality:
+    prompt: |
+      Read CODEBASE_MAP.md. Analyze code quality and maintainability:
+      - Check naming conventions and consistency
+      - Identify code duplication (DRY violations)
+      - Review function complexity and length
+      - Assess test coverage gaps for critical paths
+      - Flag any hardcoded values that should be configurable
+      Write findings to QUALITY_REPORT.md with severity levels.
+    depends_on: [scout]
+
+  # --- Fan-in: Gemini summarizes all findings ---
+
+  summarizer:
+    backend: gemini
+    model: gemini-2.5-pro
+    prompt: |
+      Read ARCHITECTURE_REPORT.md and QUALITY_REPORT.md.
+      Create a unified REVIEW_SUMMARY.md:
+      - Executive summary (top 5 issues)
+      - Priority matrix (critical/high/medium/low)
+      - Quick wins vs long-term improvements
+      - Recommended action items in order of impact
+      Be concise and actionable.
+    depends_on: [architecture-review, code-quality]
+    max_turns: 5
