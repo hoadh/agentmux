@@ -148,6 +148,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detail.SetHeader(info)
 			}
 		}
+		// Refresh pipeline view so durations update in real-time
+		if m.detail.IsPipelineView() {
+			m.detail.ShowPipelineView(m.renderPipelineView())
+		}
 		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 			return tickMsg(t)
 		})

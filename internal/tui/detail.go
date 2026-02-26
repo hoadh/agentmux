@@ -199,6 +199,11 @@ func (d *DetailModel) ClearPipelineView() {
 	d.pipeView = ""
 }
 
+// IsPipelineView returns true if the pipeline view is currently shown.
+func (d *DetailModel) IsPipelineView() bool {
+	return d.pipeView != ""
+}
+
 func formatDuration(d interface{ Seconds() float64 }) string {
 	secs := d.Seconds()
 	if secs < 60 {
