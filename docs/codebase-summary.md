@@ -1,6 +1,6 @@
 # agentmux Codebase Summary
 
-Quick reference for navigating the agentmux codebase. Total: ~2,688 LOC code + ~1,579 LOC tests across 21 Go files, 8 packages.
+Quick reference for navigating the agentmux codebase. Total: ~3,120 LOC code + ~2,345 LOC tests across 30 Go files, 9 packages.
 
 ## Module
 
@@ -11,27 +11,27 @@ Go 1.24.2+
 
 ## Package Overview
 
-### cmd/ — CLI Entry Points (111 LOC)
+### cmd/ — CLI Entry Points (134 LOC)
 
 CLI framework integration via Cobra. Entry point for all command-line operations.
 
 | File | LOC | Exports | Purpose |
 |------|-----|---------|---------|
-| root.go | 22 | `Execute()` | Cobra root command, global flags, error handling |
-| run.go | 68 | `runCmd` | Launch command: config load → DAG build → manager init → TUI start |
+| root.go | 21 | `Execute()` | Cobra root command, global flags, error handling |
+| run.go | 92 | `runCmd` | Launch command: config load → DAG build → manager init → TUI or headless start |
 | version.go | 21 | `versionCmd` | Display version info |
 
 **Key Functions**:
 - `Execute()`: Cobra command dispatcher; entry point from main.go
 - `runCmd.Run()`: Orchestrates pipeline startup (config → dag → manager → tui)
 
-### internal/config/ — Configuration (121 LOC code + tests)
+### internal/config/ — Configuration (146 LOC code + tests)
 
 YAML parsing, validation, and type definitions.
 
 | File | LOC | Exports | Purpose |
 |------|-----|---------|---------|
-| config.go | 121 | `Config`, `AgentDefaults`, `AgentConfig`, `LoadConfig()` | YAML struct definitions; parsing and validation with defaults merging |
+| config.go | 146 | `Config`, `AgentDefaults`, `AgentConfig`, `LoadConfig()` | YAML struct definitions; parsing and validation with defaults merging |
 
 **Key Types**:
 - `Config`: Root struct with `Defaults`, `Agents` map
@@ -45,18 +45,18 @@ YAML parsing, validation, and type definitions.
 
 **Validation**: Hard errors abort startup (missing prompt, unknown backend, cyclic deps). Warnings for backend incompatibilities (e.g., Gemini ignores allowedTools).
 
-### internal/agent/ — Agent Lifecycle & I/O (463 LOC code + 1,579 LOC tests)
+### internal/agent/ — Agent Lifecycle & I/O (486 LOC + 297 backend LOC + tests)
 
 Process spawning, NDJSON parsing, state management, backend selection.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| manager.go | 282 | Lifecycle state machine; token tracking; sync.RWMutex for concurrency |
-| process.go | 151 | Subprocess spawning; graceful SIGTERM → SIGKILL; pipes for I/O |
+| manager.go | 304 | Lifecycle state machine; token tracking; sync.RWMutex for concurrency |
+| process.go | 150 | Subprocess spawning; graceful SIGTERM → SIGKILL; pipes for I/O |
 | parser.go | 32 | Line-by-line NDJSON reader via bufio.Scanner; backend-agnostic |
-| backend/backend.go | 111 | Backend registry interface; shared event types |
+| backend/backend.go | 110 | Backend registry interface; shared event types |
 | backend/claude.go | 103 | Claude CLI backend; args construction and event mapping |
-| backend/gemini.go | 85 | Gemini CLI backend; args construction and event mapping |
+| backend/gemini.go | 84 | Gemini CLI backend; args construction and event mapping |
 
 **Key Types**:
 - `Manager`: Tracks agent state, token usage, logs; sync.RWMutex protected
@@ -100,18 +100,18 @@ DAG validation, topological sorting, event-driven scheduling.
 
 **Concurrency**: Scheduler uses sync.Mutex; "collect under lock, execute after unlock" pattern prevents deadlock when sending on channels.
 
-### internal/tui/ — Interactive Dashboard (1,239 LOC code + tests)
+### internal/tui/ — Interactive Dashboard (1,292 LOC code + tests)
 
 Bubbletea composite UI: sidebar, detail view, statusbar, spawn modal.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| app.go | 593 | Root model; focus management; event routing to children |
-| sidebar.go | 137 | Agent list with state indicators; Vim navigation (j/k) |
-| detail.go | 218 | Scrollable log viewport; 10k-line ring buffer with auto-scroll |
-| spawn.go | 124 | Modal for manual agent spawning with text inputs |
-| statusbar.go | 90 | Progress stats and mode-specific keybinding legend |
-| styles.go | 82 | Lipgloss palette; state icons; colors and spacing |
+| app.go | 622 | Root model; focus management; event routing to children |
+| sidebar.go | 153 | Agent list with state indicators; Vim navigation (j/k) |
+| detail.go | 222 | Scrollable log viewport; 10k-line ring buffer with auto-scroll |
+| spawn.go | 123 | Modal for manual agent spawning with text inputs |
+| statusbar.go | 89 | Progress stats and mode-specific keybinding legend |
+| styles.go | 83 | Lipgloss palette; state icons; colors and spacing |
 
 **Key Design Patterns**:
 
@@ -134,6 +134,24 @@ Bubbletea composite UI: sidebar, detail view, statusbar, spawn modal.
 - `?`: Display help
 - `q`: Quit gracefully
 
+### internal/headless/ — Non-TUI Pipeline Execution (273 LOC code + tests)
+
+Headless (non-interactive) mode for automation and CI/CD integration.
+
+| File | LOC | Purpose |
+|------|-----|---------|
+| runner.go | 160 | Main orchestration; config load, DAG build, agent spawning without TUI |
+| formatter.go | 113 | Output formatting; converts agent events to structured text (JSON, plain text) |
+
+**Design Pattern**: Headless mode reuses config, DAG, Manager, and event handling logic from TUI; replaces interactive Bubbletea with formatter-based output.
+
+**Key Features**:
+- Automatic pipeline execution without TUI interaction
+- Real-time event streaming to stdout or file
+- Exit codes for pipeline success/failure
+- Signal handling (SIGTERM → graceful shutdown)
+- Suitable for CI/CD, cron jobs, and batch processing
+
 ### internal/log/ — Event Audit Trail (77 LOC code)
 
 Persistent JSONL event logging.
@@ -153,22 +171,29 @@ main.go → cmd/root.go → cmd/run.go
                           ├→ internal/agent
                           │  ├→ internal/agent/backend (Claude, Gemini)
                           │  └→ internal/log
-                          └→ internal/tui
+                          ├→ internal/tui (interactive mode)
+                          │  ├→ internal/agent
+                          │  └→ internal/dag
+                          └→ internal/headless (non-interactive mode)
+                             ├→ internal/config
+                             ├→ internal/dag
                              ├→ internal/agent
-                             └→ internal/dag
+                             └→ internal/log
 ```
 
-**Key Property**: Zero circular imports; strict layering enforced.
+**Key Property**: Zero circular imports; strict layering enforced. Headless and TUI are mutually exclusive modes sharing lower-level packages.
 
 ## External Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| charmbracelet/bubbletea | v1.3.5 | TUI framework, event loop, models |
-| charmbracelet/bubbles | v0.21.0 | Viewport, textinput components |
-| charmbracelet/lipgloss | v1.1.0 | Terminal styling, layout |
-| spf13/cobra | v1.9.1 | CLI framework, command structure |
+| charmbracelet/bubbletea | v0.27.x+ | TUI framework, event loop, models |
+| charmbracelet/bubbles | v0.20.x+ | Viewport, textinput components |
+| charmbracelet/lipgloss | v0.12.x+ | Terminal styling, layout |
+| spf13/cobra | v1.8.x+ | CLI framework, command structure |
 | gopkg.in/yaml.v3 | v3.x | YAML config parsing |
+
+See `go.mod` for exact pinned versions.
 
 ## Testing Overview
 
@@ -177,16 +202,19 @@ main.go → cmd/root.go → cmd/run.go
 | Package | Tests | Coverage | Focus |
 |---------|-------|----------|-------|
 | config | 15 | >90% | YAML parsing, validation, defaults |
-| agent | 30+ | >85% | Process lifecycle, parser, concurrent access |
-| dag | 20+ | >90% | Cycle detection, topo sort, scheduling |
+| agent | 35+ | >85% | Process lifecycle, parser, concurrent access |
+| dag | 25+ | >90% | Cycle detection, topo sort, scheduling |
 | tui | 10+ | >70% | Model composition, event routing |
+| headless | 15+ | >80% | Runner, formatter, event processing |
+
+**Total**: 130+ tests across 9 packages
 
 ### Test Patterns
 
 - **Fixtures**: YAML and NDJSON samples in `testdata/` per package
 - **Mocking**: Interface-based dependency injection for unit tests
 - **Concurrency**: sync.WaitGroup for goroutine coordination in concurrent tests
-- **Coverage Target**: >80% on critical paths (parser, scheduler, manager)
+- **Coverage Target**: >80% on critical paths (parser, scheduler, manager, headless runner)
 
 ### Running Tests
 
@@ -226,11 +254,11 @@ go test -v ./...           # Verbose output
 
 ## Code Quality Metrics
 
-- **Total LOC**: ~2,688 (code) + ~1,579 (tests) = ~4,267 total
-- **Avg File Size**: ~127 LOC per file (excellent for context)
-- **Max File Size**: 593 LOC (app.go) — reasonable for root model
-- **Test Count**: 70+ tests across 7 packages
-- **Coverage**: >80% on critical paths (parser, scheduler, manager)
+- **Total LOC**: ~3,120 (code) + ~2,345 (tests) = ~5,465 total
+- **Avg File Size**: ~104 LOC per file (excellent for context management)
+- **Max File Size**: 622 LOC (app.go) — reasonable for composite TUI root model
+- **Test Count**: 130+ tests across 9 packages
+- **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner)
 
 ## Quick Navigation
 
@@ -240,7 +268,9 @@ go test -v ./...           # Verbose output
 - NDJSON parsing? → `internal/agent/parser.go`
 - DAG scheduling? → `internal/dag/scheduler.go`
 - TUI layout? → `internal/tui/app.go`
-- Keybindings? → Search for `HandleMsg` in tui/app.go
+- Keybindings? → Search for `HandleMsg` in `internal/tui/app.go`
+- Headless mode? → `internal/headless/runner.go` and `formatter.go`
+- Event logging? → `internal/log/writer.go`
 - Tests? → Look for `_test.go` files; fixtures in `testdata/`
 
 ---

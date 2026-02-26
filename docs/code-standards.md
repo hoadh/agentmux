@@ -18,7 +18,7 @@
   agentmux.yaml     # Configuration file
   ```
 
-All package logic lives in `internal/` to enforce clean API boundaries.
+All package logic lives in `internal/` to enforce clean API boundaries. TUI and headless modes are mutually exclusive frontends sharing core packages.
 
 ## File Naming
 
@@ -206,7 +206,133 @@ func NewScheduler(g *Graph, mgr *agent.Manager) *Scheduler {
 - Avoid global state in test-critical code
 - Mock via interfaces in tests
 
+## Headless Mode Patterns
+
+When implementing non-TUI pipeline execution:
+
+### Runner Structure
+
+```go
+// internal/headless/runner.go
+type Runner struct {
+    cfg       *config.Config
+    dag       *dag.Graph
+    scheduler *dag.Scheduler
+    manager   *agent.Manager
+    formatter *Formatter
+}
+
+func (r *Runner) Run(ctx context.Context) error {
+    // 1. Validate config
+    if err := r.cfg.ValidateAcyclic(); err != nil {
+        return err
+    }
+
+    // 2. Build DAG (same as TUI)
+    graph, err := dag.NewGraph(r.cfg)
+    if err != nil {
+        return err
+    }
+
+    // 3. Initialize scheduler (same as TUI)
+    r.scheduler = dag.NewScheduler(graph, r.manager)
+
+    // 4. Main event loop (instead of Bubbletea, listen to channels)
+    for {
+        select {
+        case msg := <-r.scheduler.EventCh:
+            // Format and output to stdout/file
+            r.formatter.Format(msg)
+
+        case <-ctx.Done():
+            // Handle SIGTERM/SIGINT
+            return r.manager.Shutdown(5 * time.Second)
+        }
+    }
+}
+```
+
+### Signal Handling Pattern
+
+```go
+func (r *Runner) setupSignalHandling(ctx context.Context) context.Context {
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+    ctx, cancel := context.WithCancel(ctx)
+    go func() {
+        <-sigCh
+        cancel()
+    }()
+
+    return ctx
+}
+```
+
+### Formatter Interface
+
+```go
+// internal/headless/formatter.go
+type Formatter interface {
+    Format(msg tea.Msg) error  // Convert Bubbletea message to output
+    Close() error               // Flush buffers
+}
+
+type PlainTextFormatter struct {
+    w io.Writer
+}
+
+func (f *PlainTextFormatter) Format(msg tea.Msg) error {
+    switch m := msg.(type) {
+    case agent.StateChangeMsg:
+        fmt.Fprintf(f.w, "[%s] %s: %s\n", time.Now().Format(time.RFC3339), m.Agent, m.NewState)
+    case agent.OutputMsg:
+        fmt.Fprintf(f.w, "[%s] %s: %s\n", time.Now().Format(time.RFC3339), m.Agent, m.Text)
+    }
+    return nil
+}
+```
+
+**Pattern**: Reuse agent event types and Scheduler; only replace TUI rendering with formatter-based output.
+
 ## Backend Registry Pattern
+
+Each backend self-registers via `init()` on import. No changes to Manager or config needed.
+
+### Backend Interface
+
+```go
+// internal/agent/backend/backend.go
+type Backend interface {
+    // Args constructs CLI invocation args from config
+    Args(cfg *config.AgentConfig) []string
+
+    // ConvertEvent maps backend-specific NDJSON to shared event types
+    ConvertEvent(line []byte) (BackendEvent, error)
+}
+
+type BackendEvent struct {
+    Type    string      // "started", "output", "result", "error"
+    Payload interface{} // Event-specific data
+}
+
+// Global registry
+var registry = make(map[string]Backend)
+
+func Register(name string, backend Backend) {
+    registry[name] = backend
+}
+
+func Get(name string) (Backend, error) {
+    b, ok := registry[name]
+    if !ok {
+        return nil, fmt.Errorf("unknown backend: %s", name)
+    }
+    return b, nil
+}
+```
+
+### Adding a New Backend
 
 Adding a new backend (e.g., OpenAI CLI) requires only one new file:
 
@@ -214,32 +340,61 @@ Adding a new backend (e.g., OpenAI CLI) requires only one new file:
 // internal/agent/backend/openai.go
 package backend
 
-import "github.com/hoadh/agentmux/internal/log"
+import "github.com/hoadh/agentmux/internal/config"
 
 func init() {
-    // Self-register on import
+    // Self-register on import (no config changes needed)
     Register("openai", &OpenAIBackend{})
 }
 
 type OpenAIBackend struct{}
 
+// Args constructs: openai chat --model X --stream-json ...
 func (b *OpenAIBackend) Args(cfg *config.AgentConfig) []string {
-    // Build command-line args for OpenAI CLI
     args := []string{"openai", "chat"}
     if cfg.Model != "" {
         args = append(args, "--model", cfg.Model)
     }
-    // ... add more flags
+    args = append(args, "--stream-json")
     return args
 }
 
+// ConvertEvent maps NDJSON to BackendEvent
 func (b *OpenAIBackend) ConvertEvent(line []byte) (BackendEvent, error) {
-    // Parse NDJSON and map to shared event types
-    // ...
+    var data map[string]interface{}
+    if err := json.Unmarshal(line, &data); err != nil {
+        return BackendEvent{}, err
+    }
+
+    // Map OpenAI event types to BackendEvent
+    switch data["type"] {
+    case "content_block_delta":
+        return BackendEvent{Type: "output", Payload: data["delta"]}, nil
+    case "message_stop":
+        return BackendEvent{Type: "result", Payload: data["message"]}, nil
+    default:
+        return BackendEvent{}, nil
+    }
 }
 ```
 
-**Why it works**: Backends share a common interface (`BackendEvent` types) and register via `init()` without any changes to existing code.
+### Why It Works
+
+1. **Self-registration**: `init()` runs when backend package imported; no registration code needed in Manager
+2. **Shared event types**: All backends emit `BackendEvent` with consistent `Type` and `Payload`
+3. **Config-driven backend selection**: Manager calls `Get()` based on `agent.backend` field; no hardcoded conditionals
+4. **Parser-agnostic**: Parser feeds lines to backend; backend interprets format
+5. **Zero coupling**: New backend doesn't touch config, manager, or parser
+
+**Feature Matrix** (configurable per backend):
+
+| Backend | Args() | ConvertEvent() | Supports Model | Supports Tools | Supports Turns |
+|---------|--------|---|---|---|---|
+| Claude | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Gemini | ✓ | ✓ | ✓ | ✗ | ✗ |
+| OpenAI | ✓ (example) | ✓ (example) | ✓ | TBD | TBD |
+
+See [Configuration Reference](./configuration.md) for feature warnings emitted at config load time.
 
 ## NDJSON Parser Patterns
 

@@ -34,17 +34,27 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 - **Why**: Immediate feedback accelerates iteration and debugging
 - **How**: Bubbletea composite UI; batch event processing (up to 50 per render) for responsiveness
 
-### 5. Event Stream Parsing (NDJSON)
-- **What**: Line-by-line consumption of Claude CLI `stream-json` output
-- **Why**: Enables real-time progress visibility without buffering entire output
-- **How**: bufio.Scanner for malformed line recovery; structured event type handling
+### 5. Multi-Backend Support (Claude & Gemini)
+- **What**: Each agent independently selects Claude or Gemini backend via config `backend` field
+- **Why**: Enables mixed-backend pipelines; not limited to single LLM provider
+- **How**: Registry pattern allows new backends with one file; no Manager changes needed
 
-### 6. Agent State Machine
+### 6. Event Stream Parsing (NDJSON)
+- **What**: Line-by-line consumption of Claude/Gemini CLI `stream-json` output
+- **Why**: Enables real-time progress visibility without buffering entire output
+- **How**: bufio.Scanner for malformed line recovery; structured event type handling per backend
+
+### 7. Agent State Machine
 - **What**: Pending → Running → Done | Failed | Killed | Blocked state transitions
 - **Why**: Clear semantics for lifecycle management and error handling
 - **How**: Manager tracks state and emits Bubbletea messages on transitions
 
-### 7. Audit Logging (JSONL)
+### 8. Headless Mode (Non-TUI)
+- **What**: Run pipelines without interactive terminal for automation and CI/CD
+- **Why**: Enable unattended execution, batch processing, and integration with larger systems
+- **How**: Reuse config, DAG, Manager, and Scheduler; replace Bubbletea with formatter-based output
+
+### 9. Audit Logging (JSONL)
 - **What**: All agent events persisted to `~/.agentmux/logs/*.jsonl`
 - **Why**: Enables debugging, compliance, and post-run analysis
 - **How**: Writer appends thread-safe event records with timestamps
@@ -103,10 +113,10 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 - [x] Logs persist to `~/.agentmux/logs/`; no data loss on crash
 
 ### Non-Functional
-- [x] Tests pass with >80% coverage on parser, scheduler, manager
+- [x] Tests pass with >80% coverage on parser, scheduler, manager, headless
 - [x] Benchmark: 20 agents spawn + 100 events/agent in <5s without UI lag
 - [x] Code compiles with Go 1.24.2+; no lint errors
-- [ ] Documentation covers config, architecture, keybindings, troubleshooting
+- [x] Documentation covers config, architecture, keybindings, troubleshooting, headless mode
 
 ## Success Metrics
 
@@ -146,10 +156,10 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 ## Dependencies & Constraints
 
 ### External Dependencies
-- Claude & Gemini CLIs (subprocesses): Support multi-backend orchestration
-- Go 1.24.2+: Minimum version required
-- YAML v3: For config parsing
-- Bubbletea v1.3.5+: TUI framework
+- **Claude CLI & Gemini CLI** (subprocesses): At least one required; both for multi-backend pipelines
+- **Go 1.24.2+**: Minimum version required
+- **YAML v3**: For config parsing
+- **Bubbletea v0.27+**: TUI framework (headless mode doesn't require)
 
 ### Technical Constraints
 - Single-machine execution only (no native distribution in v0.1)
