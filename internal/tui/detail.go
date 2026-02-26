@@ -12,24 +12,30 @@ import (
 
 const maxLines = 10000
 
+// taggedLine stores a line with its source type for filtering.
+type taggedLine struct {
+	text    string
+	isEvent bool // true for tool/status lines, false for assistant text
+}
+
 // DetailModel manages the agent output detail panel.
 type DetailModel struct {
 	viewport    viewport.Model
 	agentName   string // plain name for matching events
 	headerText  string // formatted header for display
-	lines       map[string][]string // per-agent output buffers
+	lines       map[string][]taggedLine // per-agent output buffers
 	autoScroll  bool
 	width       int
 	height      int
 	ready       bool
-	showRaw     bool
+	showRaw     bool // when true, show only assistant text (hide tool/status)
 	pipeView    string // non-empty = show pipeline view
 }
 
 // NewDetail creates a new detail panel.
 func NewDetail() DetailModel {
 	return DetailModel{
-		lines:      make(map[string][]string),
+		lines:      make(map[string][]taggedLine),
 		autoScroll: true,
 	}
 }
@@ -107,10 +113,19 @@ func (d *DetailModel) SetAgent(name string) {
 	d.refreshContent()
 }
 
-// AppendLine adds a line of output for a specific agent.
+// AppendLine adds an assistant text line for a specific agent.
 func (d *DetailModel) AppendLine(agentName, line string) {
+	d.appendTagged(agentName, line, false)
+}
+
+// AppendEvent adds a tool/status event line for a specific agent.
+func (d *DetailModel) AppendEvent(agentName, line string) {
+	d.appendTagged(agentName, line, true)
+}
+
+func (d *DetailModel) appendTagged(agentName, line string, isEvent bool) {
 	lines := d.lines[agentName]
-	lines = append(lines, line)
+	lines = append(lines, taggedLine{text: line, isEvent: isEvent})
 
 	// Ring buffer: trim oldest 20% if over limit
 	if len(lines) > maxLines {
@@ -126,9 +141,15 @@ func (d *DetailModel) AppendLine(agentName, line string) {
 }
 
 func (d *DetailModel) refreshContent() {
-	lines := d.lines[d.agentName]
-	content := strings.Join(lines, "\n")
-	d.viewport.SetContent(content)
+	allLines := d.lines[d.agentName]
+	var filtered []string
+	for _, l := range allLines {
+		if d.showRaw && l.isEvent {
+			continue
+		}
+		filtered = append(filtered, l.text)
+	}
+	d.viewport.SetContent(strings.Join(filtered, "\n"))
 
 	if d.autoScroll {
 		d.viewport.GotoBottom()
@@ -162,9 +183,10 @@ func (d *DetailModel) SetHeader(info *agent.AgentInfo) {
 		info.Name, icon, info.State, dur, model, tokens)
 }
 
-// ToggleLogView switches between formatted and raw output.
+// ToggleLogView switches between all output and assistant-only output.
 func (d *DetailModel) ToggleLogView() {
 	d.showRaw = !d.showRaw
+	d.refreshContent()
 }
 
 // ShowPipelineView sets the pipeline view content.

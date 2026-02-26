@@ -129,7 +129,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agent.ToolUseEvent:
 		line := fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input)
-		m.detail.AppendLine(msg.AgentName, line)
+		m.detail.AppendEvent(msg.AgentName, line)
 		m.manager.UpdateLastEvent(msg.AgentName, fmt.Sprintf("Tool: %s", msg.ToolName))
 		m.manager.UpdateDuration(msg.AgentName)
 		m.logEvent(msg.AgentName, msg)
@@ -139,14 +139,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agent.ToolResultEvent:
 		line := fmt.Sprintf("  ← %s", msg.Content)
-		m.detail.AppendLine(msg.AgentName, line)
+		m.detail.AppendEvent(msg.AgentName, line)
 		m.logEvent(msg.AgentName, msg)
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
 
 	case agent.ResultEvent:
 		line := fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens)
-		m.detail.AppendLine(msg.AgentName, line)
+		m.detail.AppendEvent(msg.AgentName, line)
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
 		m.logEvent(msg.AgentName, msg)
 		m.refreshSidebar()
@@ -157,7 +157,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agent.AgentDoneEvent:
 		m.manager.UpdateDuration(msg.AgentName)
 		if msg.ExitCode != 0 {
-			m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
+			m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
 		}
 		m.logEvent(msg.AgentName, msg)
 		m.refreshSidebar()
@@ -166,7 +166,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case agent.ErrorEvent:
-		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
+		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
 		m.logEvent(msg.AgentName, msg)
 		cmds = append(cmds, m.rearmScheduler())
 		return m, tea.Batch(cmds...)
@@ -183,7 +183,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case dag.AgentBlockedMsg:
-		m.detail.AppendLine(msg.Name, fmt.Sprintf("◌ Blocked: %s", msg.Reason))
+		m.detail.AppendEvent(msg.Name, fmt.Sprintf("◌ Blocked: %s", msg.Reason))
 		m.refreshSidebar()
 		m.refreshStats()
 		cmds = append(cmds, m.rearmScheduler())
@@ -356,30 +356,30 @@ func (m *AppModel) processAgentEvent(evt tea.Msg) {
 		m.manager.UpdateDuration(msg.AgentName)
 		m.logEvent(msg.AgentName, msg)
 	case agent.ToolUseEvent:
-		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input))
+		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("→ Tool: %s %s", msg.ToolName, msg.Input))
 		m.manager.UpdateLastEvent(msg.AgentName, fmt.Sprintf("Tool: %s", msg.ToolName))
 		m.manager.UpdateDuration(msg.AgentName)
 		m.logEvent(msg.AgentName, msg)
 	case agent.ToolResultEvent:
-		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("  ← %s", msg.Content))
+		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("  ← %s", msg.Content))
 		m.logEvent(msg.AgentName, msg)
 	case agent.ResultEvent:
-		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens))
+		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens))
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
 		m.logEvent(msg.AgentName, msg)
 	case agent.AgentDoneEvent:
 		m.manager.UpdateDuration(msg.AgentName)
 		if msg.ExitCode != 0 {
-			m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
+			m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Exited with code %d", msg.ExitCode))
 		}
 		m.logEvent(msg.AgentName, msg)
 	case agent.ErrorEvent:
-		m.detail.AppendLine(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
+		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✗ Error: %s", msg.Err))
 		m.logEvent(msg.AgentName, msg)
 	case dag.AgentStartedMsg:
 		// Handled by scheduler event below
 	case dag.AgentBlockedMsg:
-		m.detail.AppendLine(msg.Name, fmt.Sprintf("◌ Blocked: %s", msg.Reason))
+		m.detail.AppendEvent(msg.Name, fmt.Sprintf("◌ Blocked: %s", msg.Reason))
 	}
 }
 
