@@ -1,6 +1,6 @@
 # agentmux
 
-A Go TUI for spawning, orchestrating, and monitoring AI agents (Claude, Gemini) in parallel via DAG-based pipeline execution and stream-json event streams.
+A Go TUI for spawning, orchestrating, and monitoring AI agents (Claude, Gemini) in parallel via DAG-based pipeline execution and stream-json event streams. Supports headless mode for CI/CD integration.
 
 **Version:** v0.1.0 | **Go:** 1.24.2+ | **License:** MIT
 
@@ -12,6 +12,7 @@ Perfect for:
 - Parallel code generation tasks (scout → planner → coder → tester → reviewer)
 - Research and analysis workflows
 - Complex automation pipelines
+- CI/CD integration via headless mode
 - Agent orchestration testing and debugging
 
 ## Quick Start
@@ -58,13 +59,22 @@ agents:
 ### Run the Pipeline
 
 ```bash
+# Interactive TUI mode (default)
 ./agentmux run -c agentmux.yaml
+
+# Headless mode — stream events to stdout
+./agentmux run -c agentmux.yaml --headless
+
+# Headless with NDJSON output (for scripting/CI)
+./agentmux run -c agentmux.yaml --headless --format ndjson
 ```
 
-The TUI opens with:
+**TUI mode** opens with:
 - **Left sidebar**: Agent list with state indicators (● = running, ✓ = done, ✗ = failed)
 - **Main panel**: Selected agent's output logs
 - **Bottom bar**: Pipeline progress and help legend
+
+**Headless mode** streams timestamped events to stdout without any TUI dependency, making it suitable for CI/CD pipelines and scripted workflows.
 
 ## Usage
 
@@ -168,6 +178,44 @@ No short aliases — full model IDs required.
 
 See [Config Guide](./docs/configuration.md) for full schema.
 
+### Headless Mode
+
+Run pipelines without the TUI by passing `--headless`. Events stream to stdout in real time.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--headless` | `false` | Run without TUI, stream events to stdout |
+| `--format` | `text` | Output format: `text` or `ndjson` |
+
+**Text format** produces human-readable lines:
+
+```
+[14:30:05] [scout] STARTED
+[14:30:06] [scout] Exploring the codebase...
+[14:30:10] [scout] -> Tool: bash find . -name "*.go"
+[14:30:10] [scout] DONE
+[14:30:10] [planner] STARTED
+...
+[14:30:45] [pipeline] COMPLETED
+```
+
+**NDJSON format** produces one JSON object per line for machine consumption:
+
+```json
+{"ts":"2026-02-27T14:30:05+07:00","agent":"scout","type":"agent_started"}
+{"ts":"2026-02-27T14:30:06+07:00","agent":"scout","type":"assistant","data":{"text":"Exploring..."}}
+{"ts":"2026-02-27T14:30:45+07:00","agent":"pipeline","type":"pipeline_done","data":{"success":true}}
+```
+
+**Exit codes**: `0` = all agents succeeded, `1` = any failure, `130` = SIGINT, `143` = SIGTERM.
+
+**CI/CD example**:
+
+```bash
+./agentmux run -c pipeline.yaml --headless --format ndjson | tee output.jsonl
+echo "Exit: $?"
+```
+
 ### Keybindings
 
 | Key | Action |
@@ -192,10 +240,13 @@ CLI (Cobra)
   ├─> Manager (agent lifecycle + backend resolution)
   ├─> Scheduler (event-driven orchestration)
   ├─> Backend (registry: Claude, Gemini, extensible)
-  └─> TUI (Bubbletea composite UI)
-        ├─> Process (subprocess per agent via backend)
-        ├─> Parser (NDJSON stream reader + backend converter)
-        └─> Writer (event audit log)
+  ├─> TUI (Bubbletea composite UI)
+  │     ├─> Process (subprocess per agent via backend)
+  │     ├─> Parser (NDJSON stream reader + backend converter)
+  │     └─> Writer (event audit log)
+  └─> Headless (non-TUI runner for CI/CD)
+        ├─> Text/NDJSON formatters
+        └─> Signal handling (graceful shutdown)
 ```
 
 **Key Features:**
@@ -204,6 +255,7 @@ CLI (Cobra)
 - **NDJSON Parsing**: Line-by-line stream consumption; backend-specific event conversion
 - **Concurrent Safety**: sync.RWMutex for state, sync.Mutex for scheduler critical sections
 - **Batch Event Processing**: Up to 50 events per TUI render cycle for responsiveness
+- **Headless Mode**: Run pipelines without TUI; text or NDJSON output for CI/CD
 - **Extensible**: Adding a new backend = 1 new file with `init()` registration
 
 See [System Architecture](./docs/system-architecture.md) for detailed design patterns.
@@ -217,6 +269,7 @@ internal/
   │   └── backend/ # Backend interface, registry, Claude & Gemini impls
   ├── config/      # YAML parsing, validation, backend warnings
   ├── dag/         # Graph, scheduler
+  ├── headless/    # Non-TUI runner, text/NDJSON formatters
   ├── log/         # JSONL writer
   └── tui/         # Bubbletea UI components
 examples/          # Pipeline examples (single & mixed backend)
