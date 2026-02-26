@@ -1,8 +1,11 @@
 # Binary
 agentmux
 
+# Test
+coverage.out
+
 # Session reports (transient agent artifacts)
-plans/reports/
+plans/*
 
 # OS files
 .DS_Store
