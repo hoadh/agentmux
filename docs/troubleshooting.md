@@ -158,6 +158,87 @@ tar -czf ~/.agentmux/logs/archive-2026-02.tar.gz \
 rm ~/.agentmux/logs/*-2026-02-*.jsonl
 ```
 
+### Issue: "Template variable syntax error"
+
+**Symptom**: Error: "template parse error" or "template expansion error"
+
+**Cause**: Invalid Go template syntax in agent prompt or missing variable reference
+
+**Solution**: Check YAML agent prompts for valid `{{.var_name}}` syntax:
+
+```yaml
+# CORRECT
+prompt: "Analyze {{.project_root}} for {{.code_lang}} issues"
+
+# INCORRECT (syntax)
+prompt: "Analyze {.project_root}"  # Missing one brace
+prompt: "Analyze {{var_name}}"     # Missing dot prefix
+prompt: "Analyze {{.unknown_var}}" # Var not defined
+
+# INCORRECT (missing variable)
+vars:
+  project_root: "/path"
+agents:
+  scanner:
+    prompt: "Scan {{.code_lang}}"  # code_lang not in vars!
+```
+
+**Fix**: Define all referenced variables in YAML `vars` section or pass via CLI:
+
+```bash
+agentmux run -c pipeline.yaml --var code_lang=go
+```
+
+### Issue: "Output directory permission denied"
+
+**Symptom**: Error: "permission denied" when creating logs/results directory
+
+**Cause**: Output directory path not writable; incorrect permissions
+
+**Solution**:
+
+```bash
+# Check current output dir (default or from config)
+# Verify parent directory exists and is writable
+mkdir -p ~/.agentmux-out
+chmod 755 ~/.agentmux-out
+
+# Or specify custom output directory with write permissions
+agentmux run -c pipeline.yaml --output-dir /tmp/agentmux-out
+
+# Check permissions
+ls -ld ~/.agentmux-out
+```
+
+### Issue: "Variable override not applied"
+
+**Symptom**: Agent prompt still shows old value even after `--var` flag
+
+**Cause**: Variable name mismatch or typo in YAML reference
+
+**Solution**: Verify var name matches exactly:
+
+```yaml
+# YAML
+vars:
+  project_root: "/default"
+
+agents:
+  scanner:
+    prompt: "Scan {{.project_root}}"
+```
+
+```bash
+# CLI - must match var name exactly
+agentmux run -c pipeline.yaml --var project_root=/custom  # ✓ Works
+agentmux run -c pipeline.yaml --var projectRoot=/custom   # ✗ Ignored (no match)
+```
+
+**Debugging**: Check expanded config:
+```bash
+agentmux run -c pipeline.yaml --var x=test -v  # -v prints expanded config
+```
+
 ---
 
 ## Performance Tuning

@@ -11,6 +11,18 @@
 | `agents` | Named agent definitions with prompt, backend, model, tool restrictions |
 | `depends_on` | DAG: each agent lists dependencies (agents that run first) |
 
+## CLI Flags
+
+| Flag | Shorthand | Type | Default | Purpose |
+|------|-----------|------|---------|---------|
+| `--config` | `-c` | string | `agentmux.yaml` | Path to YAML config file |
+| `--var` | — | string (repeatable) | — | Override template variables; format: `key=value` (repeatable) |
+| `--output-dir` | — | string | `.agentmux-out` | Custom root directory for logs/results |
+| `--headless` | — | bool | `false` | Run without TUI for automation |
+| `--format` | — | string | `text` | Output format: `text` or `ndjson` (headless only) |
+
+**Precedence**: CLI flags override YAML values. `--var` overrides YAML `vars` section. `--output-dir` overrides YAML `output_dir`.
+
 ## Template Variables
 
 Use the `vars` section to define reusable values expanded in agent prompts via Go text/template syntax:
@@ -29,6 +41,40 @@ agents:
 **Syntax**: `{{.var_name}}` in agent prompts is replaced with the value from `vars[var_name]`.
 
 **Validation**: Missing variables abort config loading with a template expansion error. Values must be strings; numbers and booleans should be quoted as strings.
+
+## Template Variable Overrides (CLI `--var` flag)
+
+Override or add template variables at the command line without editing YAML:
+
+```bash
+# Override a single variable
+agentmux run -c pipeline.yaml --var project_root=/tmp/myproj
+
+# Override multiple variables (repeatable)
+agentmux run -c pipeline.yaml \
+  --var project_root=/tmp/myproj \
+  --var code_lang=python \
+  --var max_depth=5
+```
+
+**Precedence**: CLI `--var` overrides YAML `vars` section. New variables added via CLI are merged with YAML vars.
+
+**Example YAML with CLI override**:
+```yaml
+vars:
+  project_root: "/default/path"
+  code_lang: "go"
+
+agents:
+  scanner:
+    prompt: "Scan {{.project_root}} for {{.code_lang}} files"
+```
+
+Running with CLI override:
+```bash
+agentmux run -c pipeline.yaml --var project_root=/custom/path
+# Result: project_root → "/custom/path", code_lang → "go"
+```
 
 ## Output Directory
 

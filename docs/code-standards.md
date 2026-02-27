@@ -27,6 +27,117 @@ All package logic lives in `internal/` to enforce clean API boundaries. TUI and 
   - Test files: `*_test.go` (e.g., `parser_test.go`)
   - Related files grouped by domain (e.g., all TUI models in `internal/tui/`)
 
+- **Shell Scripts**: `lowercase-with-dashes.sh` (e.g., `install.sh`)
+  - POSIX-compliant; no bash-specific features unless documented
+
+## Template Variables
+
+### YAML Vars Section
+
+Define reusable variables in YAML for prompt expansion:
+
+```yaml
+vars:
+  project_root: "/path/to/project"
+  code_lang: "go"
+  max_depth: "3"
+
+agents:
+  scanner:
+    prompt: "Scan {{.project_root}} for {{.code_lang}} files to depth {{.max_depth}}"
+```
+
+**Pattern**: `{{.var_name}}` uses Go `text/template` syntax; values are always strings.
+
+### CLI Flag Handling
+
+Override vars via CLI `--var` flag in `cmd/run.go`:
+
+```go
+func init() {
+    runCmd.Flags().StringArrayVar(
+        &varOverrides, "var", []string{},
+        "Template variable override (repeatable, format: key=value)",
+    )
+}
+
+// In runCmd.Run():
+for _, varStr := range varOverrides {
+    parts := strings.Split(varStr, "=")
+    if len(parts) == 2 {
+        cfg.Vars[parts[0]] = parts[1]  // Override YAML var
+    }
+}
+```
+
+**Precedence**: CLI `--var` overrides YAML `vars` section. New variables added via CLI merged with YAML.
+
+### Template Expansion (ExpandTemplates)
+
+Located in `internal/config/config.go`:
+
+```go
+func ExpandTemplates(cfg *Config) error {
+    t := template.New("config")
+    // Parse and execute {{.var_name}} in each agent prompt
+    for _, agent := range cfg.Agents {
+        tmpl, err := t.Parse(agent.Prompt)
+        if err != nil {
+            return fmt.Errorf("template parse error: %w", err)
+        }
+        var buf strings.Builder
+        if err := tmpl.Execute(&buf, cfg.Vars); err != nil {
+            return fmt.Errorf("template expansion error: %w", err)
+        }
+        agent.Prompt = buf.String()
+    }
+    return nil
+}
+```
+
+**Error Handling**: Missing variables abort with template expansion error. All var values must be strings.
+
+## CLI Flag Conventions
+
+### Flag Naming
+
+- **Short flags**: Single letter (e.g., `-c`, `-v`)
+- **Long flags**: Kebab-case (e.g., `--config`, `--output-dir`, `--var`)
+- **Bool flags**: Verb present for enabled state (e.g., `--headless` means "run headless")
+
+### Repeatable Flags
+
+For `--var`, use `StringArrayVar`:
+
+```go
+runCmd.Flags().StringArrayVar(&varOverrides, "var", []string{}, "...")
+```
+
+Users invoke as:
+```bash
+agentmux run --var key1=val1 --var key2=val2 --var key3=val3
+```
+
+### Flag Precedence
+
+Establish clear precedence in documentation and code:
+
+1. **CLI flag** (highest priority)
+2. **YAML value** (medium priority)
+3. **Default** (lowest priority)
+
+Example:
+```go
+// --output-dir overrides YAML output_dir, defaults to .agentmux-out
+outputDir := cliOutputDir
+if outputDir == "" {
+    outputDir = cfg.OutputDir
+}
+if outputDir == "" {
+    outputDir = ".agentmux-out"
+}
+```
+
 ## Error Handling
 
 Wrap errors with context using `fmt.Errorf`:

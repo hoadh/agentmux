@@ -22,9 +22,20 @@ Cobra provides hierarchical command structure and flag parsing.
 - **config.go**: YAML struct parsing and validation
   - Loads `agentmux.yaml` (agent definitions, pipeline DAG, global settings)
   - Defines `Config`, `AgentDefaults`, and `AgentConfig` structs
-  - Template variable expansion via `ExpandTemplates()` (Go text/template syntax)
-  - Output directory configuration via `OutputDir` field
+  - Validates YAML syntax, required fields, and acyclicity
+  - Template variable expansion via `ExpandTemplates()` (Go text/template syntax with `{{.var_name}}`)
+  - Output directory configuration via `OutputDir` field (defaults to `.agentmux-out`)
+  - CLI flag precedence handling: `--var` and `--output-dir` override YAML values
   - Returns typed configuration for downstream use
+
+### 2.1. Configuration Pipeline
+
+1. **Load**: Parse YAML file into `Config` struct
+2. **Merge defaults**: `ApplyDefaults()` merges `Defaults` section into each agent
+3. **CLI overrides**: CLI `--var` flags override/add to `Vars` map; CLI `--output-dir` overrides `OutputDir`
+4. **Expand templates**: `ExpandTemplates()` replaces `{{.var_name}}` in agent prompts with values from `Vars`
+5. **Validate**: Check required fields, acyclicity, and backend compatibility
+6. **Return**: Validated `Config` plus warning list (backend incompatibilities)
 
 ### 3. Agent Management (`internal/agent/`)
 
@@ -187,9 +198,11 @@ Each agent's Process spawns a subprocess and reads NDJSON output asynchronously.
 YAML structure:
 ```yaml
 version: 1
+
 vars:
   var_name: "value"
   project_root: "/path/to/project"
+  code_lang: "go"
 
 output_dir: ".agentmux-out"
 
@@ -204,7 +217,7 @@ defaults:
 agents:
   agent_name:
     backend: "gemini"
-    prompt: "Task: {{.var_name}}"
+    prompt: "Task: {{.var_name}} in {{.code_lang}}"
     model: "gemini-2.5-pro"
     max_turns: 5
     allowedTools:
@@ -214,12 +227,24 @@ agents:
       - dependency_2
 ```
 
-**Vars Section**: Template variables (map[string]string) expanded via Go text/template syntax. References in agent prompts use `{{.var_name}}` syntax.
+**Vars Section**: Template variables (map[string]string) expanded via Go `text/template` syntax. References in agent prompts use `{{.var_name}}` syntax.
 
-**Output Dir**: Root directory for logs and results. Defaults to `.agentmux-out`. CLI flag `--output-dir` overrides YAML config.
+**Output Dir**: Root directory for logs and results. Defaults to `.agentmux-out`. CLI flag `--output-dir` overrides YAML value.
 
 **Defaults Section**: Global defaults for backend, model, max_turns, and allowedTools. Merged into each agent via `ApplyDefaults()`.
 
 **Agents Section**: Individual agent definitions with prompt (supports template expansion), backend override, model, tool restrictions, and DAG dependencies (`depends_on`).
+
+## CLI Flag Precedence
+
+CLI flags override YAML values with this precedence (highest to lowest):
+
+1. **CLI flags**: `--var`, `--output-dir`, `--config`, `--headless`, `--format`
+2. **YAML config**: `vars`, `output_dir`, `defaults`, `agents`
+3. **Built-in defaults**: `.agentmux-out`, `sonnet` model, `claude` backend
+
+**Example**: Running `agentmux run -c cfg.yaml --var x=cli-val --output-dir /tmp/logs` with YAML containing `vars: {x: yaml-val}` and `output_dir: ~/.agentmux`:
+- `x` becomes `cli-val` (CLI override)
+- `output_dir` becomes `/tmp/logs` (CLI override)
 
 The Config package parses this into typed structs (`Config`, `AgentDefaults`, `AgentConfig`) for downstream validation and use. See [Configuration Guide](./configuration.md) for full reference.

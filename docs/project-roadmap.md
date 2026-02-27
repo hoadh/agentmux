@@ -29,8 +29,12 @@
 - [x] Graceful process shutdown (SIGTERM + 5s → SIGKILL)
 - [x] Audit logging to JSONL (`~/.agentmux/logs/`)
 - [x] **Template variables** in agent prompts (Go text/template syntax with `{{.var_name}}`)
+- [x] **`--var` CLI flag** for template variable overrides (repeatable, key=value format)
+- [x] **`-c` shorthand** for `--config` flag
 - [x] **Configurable output directory** for logs/results (YAML `output_dir` + CLI `--output-dir` flag)
 - [x] **Result export** as markdown to configurable output directory
+- [x] **Install script** (`scripts/install.sh`) for interactive executable deployment
+- [x] **Batch blog example** (`examples/batch-blog-with-vars.yaml`) demonstrating template variables
 - [x] TUI Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, l toggle, p pipeline, q quit)
 - [x] Batch event processing (up to 50 events/cycle) for TUI responsiveness
 - [x] Concurrent-safe state management (sync.RWMutex on Manager, sync.Mutex on Scheduler)

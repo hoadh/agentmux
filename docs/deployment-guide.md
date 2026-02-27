@@ -38,17 +38,22 @@ go build -o agentmux ./cmd/main.go
 
 **Install to PATH**:
 
-Use the project's install script for interactive installation:
+Use the interactive install script:
 ```bash
 ./scripts/install.sh ./agentmux
 ```
 
-This script:
-- Validates the executable and prompts to make it executable if needed
-- Offers choice of installation target: `/usr/local/bin`, `~/.local/bin`, or custom path
-- Handles permission elevation (sudo) automatically when needed
+**Features**:
+- Validates executable; prompts to make executable if needed
+- Offers installation targets: `/usr/local/bin`, `~/.local/bin`, or custom path
+- Handles permission elevation (sudo) automatically
 - Verifies successful installation
-- Provides PATH configuration hints if needed
+- Provides PATH configuration hints
+
+**Install with custom name**:
+```bash
+./scripts/install.sh ./agentmux --name agent-orchestrator
+```
 
 Alternatively, install manually:
 ```bash
@@ -264,18 +269,44 @@ This checks for:
 
 ## Running Pipelines
 
+### CLI Flags Reference
+
+| Flag | Shorthand | Type | Default | Purpose |
+|------|-----------|------|---------|---------|
+| `--config` | `-c` | string | `agentmux.yaml` | Path to YAML config file |
+| `--var` | — | string (repeatable) | — | Template variable override; format: `key=value` |
+| `--output-dir` | — | string | `.agentmux-out` | Custom root directory for logs/results |
+| `--headless` | — | bool | false | Run without TUI |
+| `--format` | — | string | text | Output format: `text` or `ndjson` (headless only) |
+
+**Precedence**: CLI flags override YAML values.
+
 ### Basic Execution
 
 ```bash
-agentmux run -c agentmux.yaml
+# Default: config = agentmux.yaml
+agentmux run
+
+# Specify config file (shorthand)
+agentmux run -c pipeline.yaml
+
+# With template variable override
+agentmux run -c pipeline.yaml --var project_root=/custom/path
+
+# Multiple variable overrides
+agentmux run -c pipeline.yaml \
+  --var topic="Machine Learning" \
+  --var style="academic" \
+  --var output_dir="./ml-results"
 ```
 
 This:
 1. Loads and validates config
-2. Builds DAG from dependencies
-3. Spawns agents in topological order
-4. Displays interactive TUI dashboard
-5. Saves audit logs to `~/.agentmux/logs/`
+2. Applies CLI variable overrides
+3. Builds DAG from dependencies
+4. Spawns agents in topological order
+5. Displays interactive TUI dashboard
+6. Saves audit logs to configured output directory
 
 ### Interactive TUI
 

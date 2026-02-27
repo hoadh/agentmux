@@ -1,6 +1,6 @@
 # agentmux Codebase Summary
 
-Quick reference for navigating the agentmux codebase. Total: ~3,120 LOC code + ~2,345 LOC tests across 30 Go files, 9 packages.
+Quick reference for navigating the agentmux codebase. Total: ~5,020 LOC Go + 138 LOC shell across 31 Go files, 10 packages, plus install script.
 
 ## Module
 
@@ -11,19 +11,26 @@ Go 1.24.2+
 
 ## Package Overview
 
-### cmd/ — CLI Entry Points (134 LOC)
+### cmd/ — CLI Entry Points (177 LOC)
 
 CLI framework integration via Cobra. Entry point for all command-line operations.
 
 | File | LOC | Exports | Purpose |
 |------|-----|---------|---------|
 | root.go | 21 | `Execute()` | Cobra root command, global flags, error handling |
-| run.go | 92 | `runCmd` | Launch command: config load → DAG build → manager init → TUI or headless start |
+| run.go | 135 | `runCmd` | Launch command: config load → DAG build → manager init → TUI or headless start |
 | version.go | 21 | `versionCmd` | Display version info |
 
 **Key Functions**:
 - `Execute()`: Cobra command dispatcher; entry point from main.go
 - `runCmd.Run()`: Orchestrates pipeline startup (config → dag → manager → tui)
+
+**CLI Flags** (defined in `run.go`):
+- `--config` / `-c`: Config file path (default: `agentmux.yaml`)
+- `--headless`: Run without TUI
+- `--format`: Output format (`text` or `ndjson`, headless only)
+- `--output-dir`: Custom output directory for logs/results
+- `--var`: Template variable override (repeatable, key=value format)
 
 ### internal/config/ — Configuration (175 LOC code + tests)
 
@@ -176,6 +183,21 @@ Agent output persistence as markdown files.
 
 **Key Feature**: Thread-safe result writer with sync.Mutex. Creates target directory if needed. One markdown file per agent per run. Overwrites existing files.
 
+### scripts/ — Deployment & Installation (138 LOC)
+
+| File | LOC | Language | Purpose |
+|------|-----|----------|---------|
+| install.sh | 138 | POSIX Shell | Interactive installer for placing agentmux executable in system PATH |
+
+**Key Features**:
+- Validates executable and prompts to make executable if needed
+- Offers choice of installation targets: `/usr/local/bin`, `~/.local/bin`, or custom path
+- Handles permission elevation (sudo) automatically
+- Verifies successful installation
+- Provides PATH configuration hints if needed
+
+**Usage**: `./scripts/install.sh ./agentmux [--name custom-name]`
+
 ## Dependency Graph
 
 ```
@@ -278,12 +300,27 @@ go test -v ./...           # Verbose output
 - **Test Count**: 135+ tests across 10 packages
 - **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner, config)
 
+## Example Pipelines
+
+Located in `examples/` directory:
+
+| File | Purpose |
+|------|---------|
+| `agentmux.yaml` | Basic 5-agent pipeline (scout → planner → coder → tester → reviewer) |
+| `batch-blog-with-vars.yaml` | Batch blog generation with template variables for topic and style overrides |
+
+Example execution with template variable override:
+```bash
+agentmux run -c examples/batch-blog-with-vars.yaml --var topic="AI Safety" --var style="academic"
+```
+
 ## Quick Navigation
 
 **Find what you need:**
 - Configuration parsing? → `internal/config/config.go`
-- Template variables? → `internal/config/config.go` ExpandTemplates() function
-- Output directory? → `internal/config/config.go` OutputDir field
+- Template variables and CLI `--var` handling? → `internal/config/config.go` ExpandTemplates() function and cmd/run.go flag parsing
+- Output directory config? → `internal/config/config.go` OutputDir field
+- CLI flags (`-c`, `--var`, `--output-dir`)? → `cmd/run.go`
 - Agent process management? → `internal/agent/process.go`
 - NDJSON parsing? → `internal/agent/parser.go`
 - DAG scheduling? → `internal/dag/scheduler.go`
@@ -292,6 +329,7 @@ go test -v ./...           # Verbose output
 - Headless mode? → `internal/headless/runner.go` and `formatter.go`
 - Event logging? → `internal/log/writer.go`
 - Result export? → `internal/result/writer.go`
+- Installation script? → `scripts/install.sh`
 - Tests? → Look for `_test.go` files; fixtures in `testdata/`
 
 ---

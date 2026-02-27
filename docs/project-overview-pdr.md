@@ -59,6 +59,16 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 - **Why**: Enables debugging, compliance, and post-run analysis
 - **How**: Writer appends thread-safe event records with timestamps
 
+### 10. Template Variable Overrides (CLI `--var` flag)
+- **What**: Override or add template variables at the command line without editing YAML
+- **Why**: Enable parameterized pipelines for different runs (e.g., topic, style, output format)
+- **How**: `--var` flag parses key=value pairs; repeatable; CLI values override YAML `vars` section
+
+### 11. `-c` Shorthand for `--config`
+- **What**: Short alias for `--config` flag
+- **Why**: Faster to type; matches Unix conventions (`gcc -c`, etc.)
+- **How**: Cobra flag `--config` / `-c` bidirectional mapping
+
 ## Non-Functional Requirements
 
 ### Performance
@@ -95,11 +105,11 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 
 ## Out of Scope (v0.1.0)
 
-- Agent templates or pre-built workflows
-- Output export (JSON/CSV) — manual log parsing sufficient
-- Web UI or remote execution
-- Agent restart/retry logic on transient failures
-- Multi-machine distributed execution
+- Agent templates or pre-built workflows (defer to v0.2.0)
+- Output export formats (JSON/CSV) — markdown and JSONL logs sufficient
+- Web UI or remote execution (defer to v0.3.0+)
+- Agent restart/retry logic on transient failures (defer to v0.2.0)
+- Multi-machine distributed execution (defer to v0.3.0)
 
 ## Acceptance Criteria
 

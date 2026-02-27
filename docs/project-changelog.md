@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- **`-c` Shorthand**: New `-c` shorthand for `--config` flag. Usage: `agentmux run -c pipeline.yaml` (equivalent to `agentmux run --config pipeline.yaml`). Feature added 2026-02-26.
+- **`--var` CLI Flag**: New repeatable `--var` flag for template variable overrides via CLI. Syntax: `agentmux run -c pipeline.yaml --var key=value --var another=value2`. CLI values override YAML `vars` section. Feature added 2026-02-26.
+- **Batch Blog Example**: New example pipeline `examples/batch-blog-with-vars.yaml` demonstrates template variables and multi-agent blog generation workflow. Feature added 2026-02-26.
 - **Install Script**: New `scripts/install.sh` provides interactive installation utility for placing executables in system paths. Supports multiple destination options, automatic permission handling, and PATH configuration guidance. Usage: `./scripts/install.sh <executable> [--name <name>]`. Feature added 2026-02-27.
 - **Template Variables**: New `vars` section in YAML config enables Go text/template expansion in agent prompts using `{{.var_name}}` syntax. Feature added 2026-02-27.
 - **Configurable Output Directory**: New `--output-dir` CLI flag and YAML `output_dir` field allow custom location for logs and results. Defaults to `.agentmux-out`. CLI flag overrides YAML config. Feature added 2026-02-27.
