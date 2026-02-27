@@ -34,6 +34,14 @@ go build -o agentmux ./cmd/main.go
 Create `agentmux.yaml`:
 
 ```yaml
+version: 1
+
+vars:
+  project_name: "agentmux"
+  code_lang: "go"
+
+output_dir: ".agentmux-out"
+
 defaults:
   backend: claude        # Default backend: "claude" or "gemini"
   model: "sonnet"
@@ -43,7 +51,7 @@ agents:
   scout:
     backend: gemini      # Override: use Gemini CLI for this agent
     model: gemini-2.5-pro
-    prompt: "Explore the codebase and summarize."
+    prompt: "Explore the {{.project_name}} {{.code_lang}} codebase and summarize."
     max_turns: 5
 
   planner:
@@ -56,11 +64,19 @@ agents:
     model: "opus"
 ```
 
+**Template variables** (`vars` section) allow you to define reusable values with `{{.var_name}}` expansion in agent prompts. Override or add vars from the CLI with `--var key=value`. **Output directory** (`output_dir`) specifies where logs and results are saved (default: `.agentmux-out`).
+
 ### Run the Pipeline
 
 ```bash
 # Interactive TUI mode (default)
 ./agentmux run -c agentmux.yaml
+
+# Override or add template variables from CLI
+./agentmux run -c agentmux.yaml --var project_name=myapp --var language=Go
+
+# Custom output directory
+./agentmux run -c agentmux.yaml --output-dir ./output
 
 # Headless mode — stream events to stdout
 ./agentmux run -c agentmux.yaml --headless
@@ -80,16 +96,18 @@ agents:
 
 ### Configuration
 
-Define agents, backends, models, and DAG dependencies in `agentmux.yaml`. Supports Claude and Gemini backends with per-agent overrides.
+Define agents, backends, models, and DAG dependencies in `agentmux.yaml`. Supports Claude and Gemini backends with per-agent overrides. Use `vars` for template variables and `output_dir` for custom result/log storage.
 
-See [Configuration Guide](./docs/configuration.md) for the full schema, validation rules, model references, and tool lists.
+See [Configuration Guide](./docs/configuration.md) for the full schema, validation rules, model references, template variables, and tool lists.
 
 ### Headless Mode
 
-Run pipelines without the TUI by passing `--headless`. Supports `--format text` (default) and `--format ndjson` for CI/CD scripting.
+Run pipelines without the TUI by passing `--headless`. Supports `--format text` (default) and `--format ndjson` for CI/CD scripting. Results are saved to `{output_dir}/results/` for easy post-processing.
 
 ```bash
-./agentmux run -c pipeline.yaml --headless --format ndjson | tee output.jsonl
+./agentmux run -c pipeline.yaml --headless --format ndjson --output-dir ./ci-results | tee output.jsonl
+# Agent results available in ./ci-results/results/
+# Event logs available in ./ci-results/logs/
 ```
 
 Exit codes: `0` = success, `1` = failure, `130` = SIGINT, `143` = SIGTERM. See [Configuration Guide](./docs/configuration.md#headless-mode) for format examples.

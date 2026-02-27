@@ -67,10 +67,6 @@ func LoadConfig(path string) (*Config, []string, error) {
 
 	ApplyDefaults(&cfg)
 
-	if err := ExpandTemplates(&cfg); err != nil {
-		return nil, nil, err
-	}
-
 	warnings, err := Validate(&cfg)
 	if err != nil {
 		return nil, nil, err

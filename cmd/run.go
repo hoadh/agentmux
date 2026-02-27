@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hoadh/agentmux/internal/agent"
@@ -20,6 +21,7 @@ var (
 	headlessMode bool
 	outputFormat string
 	outputDir    string
+	cliVars      []string
 )
 
 var runCmd = &cobra.Command{
@@ -32,6 +34,7 @@ func init() {
 	runCmd.Flags().BoolVar(&headlessMode, "headless", false, "run pipeline without TUI, streaming events to stdout")
 	runCmd.Flags().StringVar(&outputFormat, "format", "text", "output format: text or ndjson (requires --headless)")
 	runCmd.Flags().StringVar(&outputDir, "output-dir", ".agentmux-out", "output directory for logs and results")
+	runCmd.Flags().StringArrayVar(&cliVars, "var", nil, "template variable as key=value (repeatable, overrides YAML vars)")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -53,6 +56,23 @@ func runApp(cmd *cobra.Command, args []string) error {
 	}
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+
+	// Merge CLI --var flags into config vars (CLI overrides YAML)
+	for _, v := range cliVars {
+		k, val, ok := strings.Cut(v, "=")
+		if !ok || k == "" {
+			return fmt.Errorf("invalid --var %q: must be key=value", v)
+		}
+		if cfg.Vars == nil {
+			cfg.Vars = make(map[string]string)
+		}
+		cfg.Vars[k] = val
+	}
+
+	// Expand template variables in agent prompts
+	if err := config.ExpandTemplates(cfg); err != nil {
+		return fmt.Errorf("template expansion: %w", err)
 	}
 
 	// Resolve output directory: CLI flag > YAML config > default

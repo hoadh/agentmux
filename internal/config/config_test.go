@@ -407,6 +407,9 @@ func TestLoadConfig_WithVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
+	if err := ExpandTemplates(cfg); err != nil {
+		t.Fatalf("ExpandTemplates failed: %v", err)
+	}
 	want := "Analyze myapp written in Go"
 	if cfg.Agents["scout"].Prompt != want {
 		t.Errorf("got %q, want %q", cfg.Agents["scout"].Prompt, want)
@@ -415,8 +418,11 @@ func TestLoadConfig_WithVars(t *testing.T) {
 
 func TestLoadConfig_WithVarsUndefined(t *testing.T) {
 	path := filepath.Join("testdata", "vars_undefined.yaml")
-	_, _, err := LoadConfig(path)
-	if err == nil {
+	cfg, _, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if err := ExpandTemplates(cfg); err == nil {
 		t.Fatal("expected error for undefined var")
 	}
 }
