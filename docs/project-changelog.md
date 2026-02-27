@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Install Script**: New `scripts/install.sh` provides interactive installation utility for placing executables in system paths. Supports multiple destination options, automatic permission handling, and PATH configuration guidance. Usage: `./scripts/install.sh <executable> [--name <name>]`. Feature added 2026-02-27.
 - **Template Variables**: New `vars` section in YAML config enables Go text/template expansion in agent prompts using `{{.var_name}}` syntax. Feature added 2026-02-27.
 - **Configurable Output Directory**: New `--output-dir` CLI flag and YAML `output_dir` field allow custom location for logs and results. Defaults to `.agentmux-out`. CLI flag overrides YAML config. Feature added 2026-02-27.
 - **Result Export**: New `internal/result/writer.go` saves agent outputs as markdown files to `{OutputDir}/results/{agentName}.md`. Thread-safe via sync.Mutex.

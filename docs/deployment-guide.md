@@ -37,6 +37,20 @@ go build -o agentmux ./cmd/main.go
 ```
 
 **Install to PATH**:
+
+Use the project's install script for interactive installation:
+```bash
+./scripts/install.sh ./agentmux
+```
+
+This script:
+- Validates the executable and prompts to make it executable if needed
+- Offers choice of installation target: `/usr/local/bin`, `~/.local/bin`, or custom path
+- Handles permission elevation (sudo) automatically when needed
+- Verifies successful installation
+- Provides PATH configuration hints if needed
+
+Alternatively, install manually:
 ```bash
 sudo mv agentmux /usr/local/bin/
 # or for user-only install
