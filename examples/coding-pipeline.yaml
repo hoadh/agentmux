@@ -1,5 +1,11 @@
 version: 1
 
+vars:
+  project_name: "myapp"
+  test_framework: "go test"
+
+output_dir: ".agentmux-out"
+
 defaults:
   model: sonnet
   allowedTools: ["Read", "Edit", "Write", "Bash", "Glob", "Grep"]
@@ -8,9 +14,9 @@ defaults:
 agents:
   scout:
     prompt: |
-      Explore the codebase structure. List all source files, identify the tech stack,
-      entry points, and key modules. Summarize the architecture in a brief report.
-      Save findings to SCOUT_REPORT.md in the project root.
+      Explore the {{.project_name}} codebase structure. List all source files, identify
+      the tech stack, entry points, and key modules. Summarize the architecture in a
+      brief report. Save findings to SCOUT_REPORT.md in the project root.
     max_turns: 5
 
   planner:
@@ -37,8 +43,8 @@ agents:
   tester:
     prompt: |
       Read the code changes made by the coder. Write comprehensive unit tests
-      covering happy paths, error cases, and edge cases. Run all tests and
-      ensure they pass. Fix any failing tests.
+      covering happy paths, error cases, and edge cases. Run all tests using
+      {{.test_framework}} and ensure they pass. Fix any failing tests.
     depends_on: [coder]
     max_turns: 20
 

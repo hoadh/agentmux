@@ -17,14 +17,8 @@ type Writer struct {
 	mu    sync.Mutex
 }
 
-// NewWriter creates a log writer. Creates the log directory if needed.
-func NewWriter() (*Writer, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("home dir: %w", err)
-	}
-
-	dir := filepath.Join(home, ".agentmux", "logs")
+// NewWriter creates a log writer for the given directory. Creates the directory if needed.
+func NewWriter(dir string) (*Writer, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create log dir: %w", err)
 	}

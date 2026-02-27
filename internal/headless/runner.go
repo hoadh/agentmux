@@ -12,6 +12,7 @@ import (
 	"github.com/hoadh/agentmux/internal/agent/backend"
 	"github.com/hoadh/agentmux/internal/dag"
 	"github.com/hoadh/agentmux/internal/log"
+	"github.com/hoadh/agentmux/internal/result"
 )
 
 // AgentManager defines the manager methods used by the headless runner.
@@ -30,17 +31,20 @@ type PipelineScheduler interface {
 
 // Options configures headless mode.
 type Options struct {
-	Format string    // "text" or "ndjson"
-	Output io.Writer // default: os.Stdout
+	Format     string    // "text" or "ndjson"
+	Output     io.Writer // default: os.Stdout
+	LogsDir    string    // directory for JSONL log files
+	ResultsDir string    // directory for agent result files
 }
 
 // Runner executes a pipeline without TUI, streaming events to stdout.
 type Runner struct {
-	manager   AgentManager
-	scheduler PipelineScheduler
-	formatter Formatter
-	output    io.Writer
-	logWriter *log.Writer
+	manager      AgentManager
+	scheduler    PipelineScheduler
+	formatter    Formatter
+	output       io.Writer
+	logWriter    *log.Writer
+	resultWriter *result.Writer
 }
 
 // New creates a headless runner.
@@ -56,13 +60,21 @@ func New(mgr AgentManager, sched PipelineScheduler, opts Options) *Runner {
 	default:
 		f = &TextFormatter{}
 	}
-	logWriter, _ := log.NewWriter()
+	logWriter, err := log.NewWriter(opts.LogsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: log writer: %v\n", err)
+	}
+	resultWriter, err := result.NewWriter(opts.ResultsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: result writer: %v\n", err)
+	}
 	return &Runner{
-		manager:   mgr,
-		scheduler: sched,
-		formatter: f,
-		output:    out,
-		logWriter: logWriter,
+		manager:      mgr,
+		scheduler:    sched,
+		formatter:    f,
+		output:       out,
+		logWriter:    logWriter,
+		resultWriter: resultWriter,
 	}
 }
 
@@ -139,6 +151,11 @@ func (r *Runner) handleEvent(msg tea.Msg) {
 	case backend.ResultEvent:
 		r.manager.UpdateTokens(evt.AgentName, evt.InputTokens, evt.OutputTokens)
 		r.logEvent(evt.AgentName, evt)
+		if r.resultWriter != nil && evt.Result != "" {
+			if err := r.resultWriter.Write(evt.AgentName, evt.Result); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: write result %q: %v\n", evt.AgentName, err)
+			}
+		}
 	case backend.AgentDoneEvent:
 		r.manager.UpdateDuration(evt.AgentName)
 		r.logEvent(evt.AgentName, evt)

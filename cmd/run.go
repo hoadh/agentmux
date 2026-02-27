@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hoadh/agentmux/internal/agent"
@@ -18,6 +19,7 @@ import (
 var (
 	headlessMode bool
 	outputFormat string
+	outputDir    string
 )
 
 var runCmd = &cobra.Command{
@@ -29,6 +31,7 @@ var runCmd = &cobra.Command{
 func init() {
 	runCmd.Flags().BoolVar(&headlessMode, "headless", false, "run pipeline without TUI, streaming events to stdout")
 	runCmd.Flags().StringVar(&outputFormat, "format", "text", "output format: text or ndjson (requires --headless)")
+	runCmd.Flags().StringVar(&outputDir, "output-dir", ".agentmux-out", "output directory for logs and results")
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -52,6 +55,22 @@ func runApp(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 
+	// Resolve output directory: CLI flag > YAML config > default
+	if cmd.Flags().Changed("output-dir") {
+		cfg.OutputDir = outputDir
+	}
+	if cfg.OutputDir == "" {
+		cfg.OutputDir = ".agentmux-out"
+	}
+	logsDir := filepath.Join(cfg.OutputDir, "logs")
+	resultsDir := filepath.Join(cfg.OutputDir, "results")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("create logs dir: %w", err)
+	}
+	if err := os.MkdirAll(resultsDir, 0755); err != nil {
+		return fmt.Errorf("create results dir: %w", err)
+	}
+
 	// Build DAG
 	graph, err := dag.BuildFromConfig(cfg)
 	if err != nil {
@@ -72,7 +91,11 @@ func runApp(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	if headlessMode {
-		opts := headless.Options{Format: outputFormat}
+		opts := headless.Options{
+			Format:     outputFormat,
+			LogsDir:    logsDir,
+			ResultsDir: resultsDir,
+		}
 		runner := headless.New(mgr, sched, opts)
 		if exitCode := runner.Run(ctx, cancel); exitCode != 0 {
 			os.Exit(exitCode)
@@ -81,7 +104,7 @@ func runApp(cmd *cobra.Command, args []string) error {
 	}
 
 	// TUI mode
-	app := tui.NewApp(mgr, sched, graph, ctx, cancel)
+	app := tui.NewApp(mgr, sched, graph, ctx, cancel, logsDir, resultsDir)
 	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	_, err = p.Run()

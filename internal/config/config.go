@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -10,6 +12,8 @@ import (
 // Config represents the top-level agentmux configuration.
 type Config struct {
 	Version    int                    `yaml:"version"`
+	Vars       map[string]string      `yaml:"vars"`
+	OutputDir  string                 `yaml:"output_dir"`
 	Defaults   AgentDefaults          `yaml:"defaults"`
 	Agents     map[string]AgentConfig `yaml:"agents"`
 	AgentOrder []string               `yaml:"-"` // preserves YAML key order
@@ -63,12 +67,36 @@ func LoadConfig(path string) (*Config, []string, error) {
 
 	ApplyDefaults(&cfg)
 
+	if err := ExpandTemplates(&cfg); err != nil {
+		return nil, nil, err
+	}
+
 	warnings, err := Validate(&cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return &cfg, warnings, nil
+}
+
+// ExpandTemplates expands {{.var_name}} placeholders in agent prompts using cfg.Vars.
+func ExpandTemplates(cfg *Config) error {
+	if len(cfg.Vars) == 0 {
+		return nil
+	}
+	for name, agent := range cfg.Agents {
+		tmpl, err := template.New(name).Option("missingkey=error").Parse(agent.Prompt)
+		if err != nil {
+			return fmt.Errorf("agent %q: invalid template: %w", name, err)
+		}
+		var buf strings.Builder
+		if err := tmpl.Execute(&buf, cfg.Vars); err != nil {
+			return fmt.Errorf("agent %q: template expansion: %w", name, err)
+		}
+		agent.Prompt = buf.String()
+		cfg.Agents[name] = agent
+	}
+	return nil
 }
 
 // extractAgentOrder parses YAML to preserve the key order of the agents map.

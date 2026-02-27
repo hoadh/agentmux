@@ -359,6 +359,79 @@ func TestValidate_ClaudeNoWarnings(t *testing.T) {
 	}
 }
 
+func TestExpandTemplates_Valid(t *testing.T) {
+	cfg := &Config{
+		Vars: map[string]string{"project": "myapp", "lang": "Go"},
+		Agents: map[string]AgentConfig{
+			"scout": {Prompt: "Analyze {{.project}} in {{.lang}}"},
+		},
+	}
+	if err := ExpandTemplates(cfg); err != nil {
+		t.Fatalf("ExpandTemplates failed: %v", err)
+	}
+	want := "Analyze myapp in Go"
+	if cfg.Agents["scout"].Prompt != want {
+		t.Errorf("got %q, want %q", cfg.Agents["scout"].Prompt, want)
+	}
+}
+
+func TestExpandTemplates_UndefinedVar(t *testing.T) {
+	cfg := &Config{
+		Vars: map[string]string{"project": "myapp"},
+		Agents: map[string]AgentConfig{
+			"scout": {Prompt: "Use {{.undefined}}"},
+		},
+	}
+	if err := ExpandTemplates(cfg); err == nil {
+		t.Fatal("expected error for undefined var")
+	}
+}
+
+func TestExpandTemplates_NoVars(t *testing.T) {
+	cfg := &Config{
+		Agents: map[string]AgentConfig{
+			"scout": {Prompt: "Plain prompt"},
+		},
+	}
+	if err := ExpandTemplates(cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Agents["scout"].Prompt != "Plain prompt" {
+		t.Error("prompt should be unchanged")
+	}
+}
+
+func TestLoadConfig_WithVars(t *testing.T) {
+	path := filepath.Join("testdata", "vars_valid.yaml")
+	cfg, _, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	want := "Analyze myapp written in Go"
+	if cfg.Agents["scout"].Prompt != want {
+		t.Errorf("got %q, want %q", cfg.Agents["scout"].Prompt, want)
+	}
+}
+
+func TestLoadConfig_WithVarsUndefined(t *testing.T) {
+	path := filepath.Join("testdata", "vars_undefined.yaml")
+	_, _, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error for undefined var")
+	}
+}
+
+func TestLoadConfig_WithOutputDir(t *testing.T) {
+	path := filepath.Join("testdata", "output_dir.yaml")
+	cfg, _, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.OutputDir != "custom-output" {
+		t.Errorf("OutputDir: got %q, want %q", cfg.OutputDir, "custom-output")
+	}
+}
+
 func TestLoadConfig_NilAgentsMap(t *testing.T) {
 	// Create a temporary config file with no agents
 	tmpfile, err := os.CreateTemp("", "config-*.yaml")

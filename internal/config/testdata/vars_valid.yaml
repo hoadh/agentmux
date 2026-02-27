@@ -1,0 +1,7 @@
+version: 1
+vars:
+  project_name: "myapp"
+  language: "Go"
+agents:
+  scout:
+    prompt: "Analyze {{.project_name}} written in {{.language}}"

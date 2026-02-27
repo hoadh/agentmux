@@ -1,0 +1,5 @@
+version: 1
+output_dir: "custom-output"
+agents:
+  scout:
+    prompt: "Test prompt"

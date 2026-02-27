@@ -1,0 +1,6 @@
+version: 1
+vars:
+  project_name: "myapp"
+agents:
+  scout:
+    prompt: "Use {{.undefined_var}}"

@@ -13,6 +13,7 @@ import (
 	"github.com/hoadh/agentmux/internal/config"
 	"github.com/hoadh/agentmux/internal/dag"
 	agentlog "github.com/hoadh/agentmux/internal/log"
+	"github.com/hoadh/agentmux/internal/result"
 )
 
 // tickMsg fires periodically to refresh running agent durations.
@@ -39,6 +40,7 @@ type AppModel struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	logWriter    *agentlog.Writer
+	resultWriter *result.Writer
 	width        int
 	height       int
 	sidebarWidth int // computed from agent names
@@ -48,12 +50,14 @@ type AppModel struct {
 }
 
 // NewApp creates the root TUI model.
-func NewApp(mgr *agent.Manager, sched *dag.Scheduler, graph *dag.Graph, ctx context.Context, cancel context.CancelFunc) AppModel {
+func NewApp(mgr *agent.Manager, sched *dag.Scheduler, graph *dag.Graph, ctx context.Context, cancel context.CancelFunc, logsDir, resultsDir string) AppModel {
 	agents := mgr.List()
 	sidebar := NewSidebar(agents)
 	sidebar.SetFocused(true)
 
-	logWriter, _ := agentlog.NewWriter()
+	logWriter, _ := agentlog.NewWriter(logsDir)
+	resultWriter, _ := result.NewWriter(resultsDir)
+	// Errors from writer init are non-fatal; nil writers are safe (nil-checked before use)
 
 	sb := NewStatusBar()
 	sb.SetFocusPanel("sidebar")
@@ -70,6 +74,7 @@ func NewApp(mgr *agent.Manager, sched *dag.Scheduler, graph *dag.Graph, ctx cont
 		ctx:          ctx,
 		cancel:       cancel,
 		logWriter:    logWriter,
+		resultWriter: resultWriter,
 		sidebarWidth: calcSidebarWidth(agents),
 	}
 }
@@ -201,6 +206,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.AppendEvent(msg.AgentName, line)
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
 		m.logEvent(msg.AgentName, msg)
+		if m.resultWriter != nil && msg.Result != "" {
+			m.resultWriter.Write(msg.AgentName, msg.Result)
+		}
 		m.refreshSidebar()
 		m.refreshStats()
 		cmds = append(cmds, m.rearmScheduler())
@@ -419,6 +427,9 @@ func (m *AppModel) processAgentEvent(evt tea.Msg) {
 		m.detail.AppendEvent(msg.AgentName, fmt.Sprintf("✓ Done (%d in / %d out tokens)", msg.InputTokens, msg.OutputTokens))
 		m.manager.UpdateTokens(msg.AgentName, msg.InputTokens, msg.OutputTokens)
 		m.logEvent(msg.AgentName, msg)
+		if m.resultWriter != nil && msg.Result != "" {
+			m.resultWriter.Write(msg.AgentName, msg.Result)
+		}
 	case backend.AgentDoneEvent:
 		m.manager.UpdateDuration(msg.AgentName)
 		if msg.ExitCode != 0 {
