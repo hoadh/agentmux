@@ -1,0 +1,48 @@
+version: 1
+
+# Template variables — override from CLI with --var topic="cat nutrition"
+vars:
+  topic: "dog grooming basics"
+  audience: "first-time pet owners"
+  tone: "friendly and approachable"
+  word_count: "800"
+
+# Output directory — override with --output-dir ./blog-output/my-topic
+output_dir: "./blog-output"
+
+defaults:
+  model: sonnet
+  max_turns: 10
+
+agents:
+  researcher:
+    prompt: |
+      Research "{{.topic}}" for {{.audience}}.
+      Find 5 key points, common mistakes, and expert tips.
+      Save findings to RESEARCH.md.
+    max_turns: 5
+
+  writer:
+    prompt: |
+      Read RESEARCH.md. Write a {{.word_count}}-word blog post about "{{.topic}}"
+      targeting {{.audience}}. Use a {{.tone}} tone.
+      Include an intro, subheadings, and actionable tips.
+    depends_on: [researcher]
+
+  editor:
+    prompt: |
+      Review the blog post about "{{.topic}}". Check for accuracy, readability,
+      and SEO. Ensure the {{.tone}} tone is consistent throughout.
+      Fix any issues and finalize the post.
+    depends_on: [writer]
+
+# Usage:
+#   agentmux run --config examples/batch-blog-with-vars.yaml
+#   agentmux run --config examples/batch-blog-with-vars.yaml --var topic="cat nutrition guide"
+#   agentmux run --config examples/batch-blog-with-vars.yaml --var topic="puppy training" --output-dir ./blog-output/puppy
+#
+# Batch generation:
+#   for topic in "dog grooming" "cat nutrition" "puppy training"; do
+#     slug=$(echo "$topic" | tr ' ' '-')
+#     agentmux run --config examples/batch-blog-with-vars.yaml --var topic="$topic" --output-dir "./blog-output/$slug" --headless
+#   done

@@ -17,5 +17,5 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "agentmux.yaml", "config file path")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "agentmux.yaml", "config file path")
 }
