@@ -25,25 +25,29 @@ CLI framework integration via Cobra. Entry point for all command-line operations
 - `Execute()`: Cobra command dispatcher; entry point from main.go
 - `runCmd.Run()`: Orchestrates pipeline startup (config → dag → manager → tui)
 
-### internal/config/ — Configuration (146 LOC code + tests)
+### internal/config/ — Configuration (175 LOC code + tests)
 
-YAML parsing, validation, and type definitions.
+YAML parsing, validation, template expansion, and type definitions.
 
 | File | LOC | Exports | Purpose |
 |------|-----|---------|---------|
-| config.go | 146 | `Config`, `AgentDefaults`, `AgentConfig`, `LoadConfig()` | YAML struct definitions; parsing and validation with defaults merging |
+| config.go | 175 | `Config`, `AgentDefaults`, `AgentConfig`, `LoadConfig()`, `ExpandTemplates()` | YAML struct definitions; parsing, validation, defaults merging, and template variable expansion |
 
 **Key Types**:
-- `Config`: Root struct with `Defaults`, `Agents` map
+- `Config`: Root struct with `Version`, `Vars` map, `OutputDir`, `Defaults`, `Agents` map
 - `AgentDefaults`: Global defaults: backend, model, max_turns, allowedTools
 - `AgentConfig`: Individual agent with prompt, model, backend, dependencies, tool restrictions
 
 **Key Functions**:
-- `LoadConfig(path string) (*Config, error)`: Load and validate YAML from file
-- `(c *Config) ApplyDefaults()`: Merge global defaults into each agent
-- `(c *Config) ValidateAcyclic() error`: Cycle detection at load time
+- `LoadConfig(path string) (*Config, []string, error)`: Load, validate, and expand templates from YAML file
+- `ExpandTemplates(cfg *Config) error`: Expand `{{.var_name}}` placeholders in agent prompts using cfg.Vars
+- `ApplyDefaults(cfg *Config)`: Merge global defaults into each agent
+- `Validate(cfg *Config) ([]string, error)`: Cycle detection and field validation at load time
 
-**Validation**: Hard errors abort startup (missing prompt, unknown backend, cyclic deps). Warnings for backend incompatibilities (e.g., Gemini ignores allowedTools).
+**Features**:
+- **Template Variables**: `vars` section defines map[string]string; agent prompts use `{{.var_name}}` Go template syntax
+- **Output Directory**: `output_dir` field (string) configures root dir for logs/results; defaults to `.agentmux-out`
+- **Validation**: Hard errors abort startup (missing prompt, unknown backend, cyclic deps). Warnings for backend incompatibilities (e.g., Gemini ignores allowedTools).
 
 ### internal/agent/ — Agent Lifecycle & I/O (486 LOC + 297 backend LOC + tests)
 
@@ -162,6 +166,16 @@ Persistent JSONL event logging.
 
 **Key Feature**: Lazy file creation per agent; one JSONL file per run. Each line is a structured event with timestamp, agent name, and event type. Thread-safe via sync.Mutex.
 
+### internal/result/ — Result Export (34 LOC code)
+
+Agent output persistence as markdown files.
+
+| File | LOC | Purpose |
+|------|-----|---------|
+| writer.go | 34 | Save agent results as markdown to `{OutputDir}/results/{agentName}.md` |
+
+**Key Feature**: Thread-safe result writer with sync.Mutex. Creates target directory if needed. One markdown file per agent per run. Overwrites existing files.
+
 ## Dependency Graph
 
 ```
@@ -171,6 +185,7 @@ main.go → cmd/root.go → cmd/run.go
                           ├→ internal/agent
                           │  ├→ internal/agent/backend (Claude, Gemini)
                           │  └→ internal/log
+                          ├→ internal/result
                           ├→ internal/tui (interactive mode)
                           │  ├→ internal/agent
                           │  └→ internal/dag
@@ -178,10 +193,11 @@ main.go → cmd/root.go → cmd/run.go
                              ├→ internal/config
                              ├→ internal/dag
                              ├→ internal/agent
-                             └→ internal/log
+                             ├→ internal/log
+                             └→ internal/result
 ```
 
-**Key Property**: Zero circular imports; strict layering enforced. Headless and TUI are mutually exclusive modes sharing lower-level packages.
+**Key Property**: Zero circular imports; strict layering enforced. Headless and TUI are mutually exclusive modes sharing lower-level packages. Result writer is reusable across modes.
 
 ## External Dependencies
 
@@ -246,24 +262,28 @@ go test -v ./...           # Verbose output
 
 | Operation | Complexity | Notes |
 |-----------|-----------|-------|
-| Load config | O(n) agents | YAML parse and validate |
+| Load config | O(n) agents | YAML parse, validate, and template expansion |
+| Template expansion | O(n * m) agents × vars | Per-agent Go template execution |
 | Build DAG | O(n + e) agents+edges | Kahn's algorithm |
 | Spawn agent | O(1) + fork | Subprocess creation overhead ~50ms |
 | Event batch | O(min(50, buffered)) | TUI render cycle |
 | Manager lookup | O(1) + RWMutex lock | Typical <1µs contention |
+| Write result | O(m) result size | Synchronous file I/O, thread-safe via mutex |
 
 ## Code Quality Metrics
 
-- **Total LOC**: ~3,120 (code) + ~2,345 (tests) = ~5,465 total
-- **Avg File Size**: ~104 LOC per file (excellent for context management)
+- **Total LOC**: ~3,150 (code) + ~2,380 (tests) = ~5,530 total
+- **Avg File Size**: ~102 LOC per file (excellent for context management)
 - **Max File Size**: 622 LOC (app.go) — reasonable for composite TUI root model
-- **Test Count**: 130+ tests across 9 packages
-- **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner)
+- **Test Count**: 135+ tests across 10 packages
+- **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner, config)
 
 ## Quick Navigation
 
 **Find what you need:**
 - Configuration parsing? → `internal/config/config.go`
+- Template variables? → `internal/config/config.go` ExpandTemplates() function
+- Output directory? → `internal/config/config.go` OutputDir field
 - Agent process management? → `internal/agent/process.go`
 - NDJSON parsing? → `internal/agent/parser.go`
 - DAG scheduling? → `internal/dag/scheduler.go`
@@ -271,9 +291,11 @@ go test -v ./...           # Verbose output
 - Keybindings? → Search for `HandleMsg` in `internal/tui/app.go`
 - Headless mode? → `internal/headless/runner.go` and `formatter.go`
 - Event logging? → `internal/log/writer.go`
+- Result export? → `internal/result/writer.go`
 - Tests? → Look for `_test.go` files; fixtures in `testdata/`
 
 ---
 
 **Document Version**: v0.1.0
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-27
+**Features Added**: Template variables, configurable output directory

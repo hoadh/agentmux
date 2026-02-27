@@ -21,7 +21,9 @@ Cobra provides hierarchical command structure and flag parsing.
 
 - **config.go**: YAML struct parsing and validation
   - Loads `agentmux.yaml` (agent definitions, pipeline DAG, global settings)
-  - Defines `Config`, `Agent`, and `Pipeline` structs
+  - Defines `Config`, `AgentDefaults`, and `AgentConfig` structs
+  - Template variable expansion via `ExpandTemplates()` (Go text/template syntax)
+  - Output directory configuration via `OutputDir` field
   - Returns typed configuration for downstream use
 
 ### 3. Agent Management (`internal/agent/`)
@@ -65,6 +67,10 @@ Non-TUI pipeline execution for CI/CD and scripted workflows.
 ### 7. Logging (`internal/log/`)
 
 - **writer.go** (77 LOC): Thread-safe JSONL event appender; lazy file creation per agent; audit trail to `~/.agentmux/logs/`
+
+### 8. Result Writer (`internal/result/`)
+
+- **writer.go** (34 LOC): Thread-safe markdown result saver; saves agent output to `{OutputDir}/results/{agentName}.md`
 
 ## Key Design Patterns
 
@@ -180,6 +186,13 @@ Each agent's Process spawns a subprocess and reads NDJSON output asynchronously.
 
 YAML structure:
 ```yaml
+version: 1
+vars:
+  var_name: "value"
+  project_root: "/path/to/project"
+
+output_dir: ".agentmux-out"
+
 defaults:
   backend: "claude"
   model: "sonnet"
@@ -191,7 +204,7 @@ defaults:
 agents:
   agent_name:
     backend: "gemini"
-    prompt: "Task description"
+    prompt: "Task: {{.var_name}}"
     model: "gemini-2.5-pro"
     max_turns: 5
     allowedTools:
@@ -201,8 +214,12 @@ agents:
       - dependency_2
 ```
 
+**Vars Section**: Template variables (map[string]string) expanded via Go text/template syntax. References in agent prompts use `{{.var_name}}` syntax.
+
+**Output Dir**: Root directory for logs and results. Defaults to `.agentmux-out`. CLI flag `--output-dir` overrides YAML config.
+
 **Defaults Section**: Global defaults for backend, model, max_turns, and allowedTools. Merged into each agent via `ApplyDefaults()`.
 
-**Agents Section**: Individual agent definitions with prompt, backend override, model, tool restrictions, and DAG dependencies (`depends_on`).
+**Agents Section**: Individual agent definitions with prompt (supports template expansion), backend override, model, tool restrictions, and DAG dependencies (`depends_on`).
 
 The Config package parses this into typed structs (`Config`, `AgentDefaults`, `AgentConfig`) for downstream validation and use. See [Configuration Guide](./configuration.md) for full reference.

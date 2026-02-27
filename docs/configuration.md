@@ -4,9 +4,53 @@
 
 | Section | Purpose |
 |---------|---------|
+| `version` | Config format version (currently 1) |
+| `vars` | Template variables: map[string]string for prompt expansion |
+| `output_dir` | Root directory for logs and results (default: `.agentmux-out`) |
 | `defaults` | Global defaults: backend, model, max_turns, allowedTools |
 | `agents` | Named agent definitions with prompt, backend, model, tool restrictions |
 | `depends_on` | DAG: each agent lists dependencies (agents that run first) |
+
+## Template Variables
+
+Use the `vars` section to define reusable values expanded in agent prompts via Go text/template syntax:
+
+```yaml
+vars:
+  project_root: "/path/to/project"
+  code_lang: "go"
+  max_depth: "3"
+
+agents:
+  scanner:
+    prompt: "Scan {{.project_root}} for {{.code_lang}} files up to depth {{.max_depth}}"
+```
+
+**Syntax**: `{{.var_name}}` in agent prompts is replaced with the value from `vars[var_name]`.
+
+**Validation**: Missing variables abort config loading with a template expansion error. Values must be strings; numbers and booleans should be quoted as strings.
+
+## Output Directory
+
+Configure where logs and results are saved:
+
+```yaml
+output_dir: ".agentmux-out"
+```
+
+**Structure**:
+```
+.agentmux-out/
+├── logs/         # JSONL event logs per agent
+└── results/      # Markdown results per agent
+```
+
+**Priority**: CLI flag `--output-dir` > YAML `output_dir` > default `.agentmux-out`
+
+**Example**:
+```bash
+agentmux run -c pipeline.yaml --output-dir ./my-results
+```
 
 ## Multi-Backend Support
 
@@ -108,6 +152,7 @@ Run pipelines without the TUI by passing `--headless`. Events stream to stdout i
 |------|---------|-------------|
 | `--headless` | `false` | Run without TUI, stream events to stdout |
 | `--format` | `text` | Output format: `text` or `ndjson` |
+| `--output-dir` | `.agentmux-out` | Root directory for logs and results |
 
 **Text format** produces human-readable lines:
 
@@ -131,9 +176,13 @@ Run pipelines without the TUI by passing `--headless`. Events stream to stdout i
 
 **Exit codes**: `0` = all agents succeeded, `1` = any failure, `130` = SIGINT, `143` = SIGTERM.
 
+**Results Export**: Agent results are saved to `{output_dir}/results/` as markdown files. Logs are saved to `{output_dir}/logs/` as JSONL.
+
 **CI/CD example**:
 
 ```bash
-./agentmux run -c pipeline.yaml --headless --format ndjson | tee output.jsonl
+./agentmux run -c pipeline.yaml --headless --format ndjson --output-dir ./ci-results | tee output.jsonl
 echo "Exit: $?"
+# Agent results available in ./ci-results/results/
+# Event logs available in ./ci-results/logs/
 ```

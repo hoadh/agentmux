@@ -28,6 +28,9 @@
 - [x] Real-time agent state tracking (Pending → Running → Done/Failed/Killed/Blocked)
 - [x] Graceful process shutdown (SIGTERM + 5s → SIGKILL)
 - [x] Audit logging to JSONL (`~/.agentmux/logs/`)
+- [x] **Template variables** in agent prompts (Go text/template syntax with `{{.var_name}}`)
+- [x] **Configurable output directory** for logs/results (YAML `output_dir` + CLI `--output-dir` flag)
+- [x] **Result export** as markdown to configurable output directory
 - [x] TUI Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, l toggle, p pipeline, q quit)
 - [x] Batch event processing (up to 50 events/cycle) for TUI responsiveness
 - [x] Concurrent-safe state management (sync.RWMutex on Manager, sync.Mutex on Scheduler)
@@ -40,7 +43,7 @@
 4. **No retry logic**: Failed agents remain failed; manual restart required
 5. **No timeouts**: Long-running agents block pipeline; manual kill required
 6. **Event buffer cap**: 1024 events (could theoretically overflow at extreme event rates)
-7. **No templates**: Each pipeline must be defined from scratch
+7. **No pipeline templates**: Each pipeline must be defined from scratch (variable templates exist)
 
 ### Metrics & Success Criteria
 
@@ -276,5 +279,6 @@
 ---
 
 **Document Version**: v0.1.0
-**Last Updated**: 2026-02-25
-**Next Review**: 2026-05-25 (post-v0.2 planning)
+**Last Updated**: 2026-02-27
+**Latest Features**: Template variables (2026-02-27), Configurable output directory (2026-02-27)
+**Next Review**: 2026-05-27 (post-v0.2 planning)
