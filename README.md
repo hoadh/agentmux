@@ -112,6 +112,30 @@ Run pipelines without the TUI by passing `--headless`. Supports `--format text` 
 
 Exit codes: `0` = success, `1` = failure, `130` = SIGINT, `143` = SIGTERM. See [Configuration Guide](./docs/configuration.md#headless-mode) for format examples.
 
+### Batch Execution (Parallel Pipelines)
+
+Run the same config across multiple variable sets in parallel using `scripts/parallel-run.sh`:
+
+```bash
+# Inline mode — each -- starts a new pipeline
+./scripts/parallel-run.sh -c examples/batch-blog-with-vars.yaml \
+  -- --var topic="dog grooming" \
+  -- --var topic="cat nutrition" \
+  -- --var topic="puppy training"
+
+# Manifest mode — one pipeline per line in a file
+./scripts/parallel-run.sh -c examples/batch-blog-with-vars.yaml -f pipelines.txt
+```
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `-c` | `agentmux.yaml` | Config file |
+| `-f` | — | Manifest file (one pipeline per line) |
+| `-j` | `4` | Max parallel jobs |
+| `-o` | `.agentmux-out` | Base output directory |
+
+Each pipeline gets an isolated output directory derived from its `--var` values. On completion, a summary table reports pass/fail status and duration per pipeline. See [Deployment Guide](./docs/deployment-guide.md#batch-execution-multiple-pipelines-in-parallel) for CI/CD examples.
+
 ### Keybindings
 
 | Key | Action |
@@ -142,6 +166,7 @@ Exit codes: `0` = success, `1` = failure, `130` = SIGINT, `143` = SIGTERM. See [
 - `agentmux.yaml` — 5-agent coding pipeline (scout → planner → coder → tester → reviewer)
 - `examples/parallel-analysis.yaml` — Fan-out/fan-in analysis (scout → 4 parallel → summarizer)
 - `examples/mixed-backend-review.yaml` — Mixed Claude + Gemini pipeline
+- `examples/batch-blog-with-vars.yaml` — Template variables for batch content generation
 
 ## Development
 
