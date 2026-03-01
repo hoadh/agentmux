@@ -183,13 +183,14 @@ Agent output persistence as markdown files.
 
 **Key Feature**: Thread-safe result writer with sync.Mutex. Creates target directory if needed. One markdown file per agent per run. Overwrites existing files.
 
-### scripts/ — Deployment & Installation (138 LOC)
+### scripts/ — Deployment & Installation (423 LOC)
 
 | File | LOC | Language | Purpose |
 |------|-----|----------|---------|
 | install.sh | 138 | POSIX Shell | Interactive installer for placing agentmux executable in system PATH |
+| parallel-run.sh | 285 | POSIX Shell | Batch pipeline runner: executes multiple agentmux pipelines in parallel with job limiting, isolated output directories, and summary reporting |
 
-**Key Features**:
+**install.sh Key Features**:
 - Validates executable and prompts to make executable if needed
 - Offers choice of installation targets: `/usr/local/bin`, `~/.local/bin`, or custom path
 - Handles permission elevation (sudo) automatically
@@ -197,6 +198,40 @@ Agent output persistence as markdown files.
 - Provides PATH configuration hints if needed
 
 **Usage**: `./scripts/install.sh ./agentmux [--name custom-name]`
+
+**parallel-run.sh Key Features**:
+- Runs multiple pipelines in parallel with configurable job limiting (default: 4 parallel jobs)
+- Two input modes: inline (`--` separators) or manifest file (one pipeline per line)
+- Isolated output directories per pipeline; derives slug from template variables
+- Per-pipeline duration tracking and pass/fail status
+- Summary table with results (e.g., "1 passed, 1 failed out of 2 total")
+- Safe signal handling: kills child processes on Ctrl+C; no shell eval (injection-safe)
+- POSIX-compatible (sh not bash)
+
+**Usage Examples**:
+```bash
+# Inline mode: run 2 pipelines sequentially with different --var values
+./scripts/parallel-run.sh -c config.yaml \
+  -- --var topic="dogs" \
+  -- --var topic="cats"
+
+# Manifest mode: read 1 pipeline spec per line from file
+echo '--var topic="dogs"' > pipelines.txt
+echo '--var topic="cats"' >> pipelines.txt
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt
+
+# Custom job limit (6 parallel, not 4)
+./scripts/parallel-run.sh -c config.yaml -j 6 -f pipelines.txt
+```
+
+**CLI Flags**:
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `-c` | `agentmux.yaml` | Config file |
+| `-f` | (none) | Manifest file (one spec per line) |
+| `-j` | `4` | Max parallel jobs |
+| `-o` | `.agentmux-out` | Base output directory |
+| `-h` | — | Help |
 
 ## Dependency Graph
 

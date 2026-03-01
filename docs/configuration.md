@@ -232,3 +232,108 @@ echo "Exit: $?"
 # Agent results available in ./ci-results/results/
 # Event logs available in ./ci-results/logs/
 ```
+
+## Batch Execution (Multiple Pipelines)
+
+For running many pipelines in parallel with job limiting and summary reporting, use `scripts/parallel-run.sh`.
+
+### Overview
+
+`parallel-run.sh` is a POSIX shell wrapper that invokes `agentmux run` multiple times, each with different template variables. It:
+- Supports inline mode (args on CLI) or manifest mode (args from file)
+- Respects job limit (default 4, configurable with `-j`)
+- Isolates output per pipeline
+- Outputs summary table with pass/fail counts
+
+### CLI Flags for `parallel-run.sh`
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `-c` | `agentmux.yaml` | Config file to use |
+| `-f` | (none) | Manifest file: one pipeline spec per line |
+| `-j` | `4` | Max parallel jobs |
+| `-o` | `.agentmux-out` | Base output directory for all pipelines |
+| `-h` | — | Show help |
+
+### Inline Mode: Define pipelines on CLI
+
+```bash
+./scripts/parallel-run.sh -c config.yaml \
+  -- --var topic="AI Safety" \
+  -- --var topic="Machine Learning" \
+  -- --var topic="Web Development"
+```
+
+Each `--` block represents one pipeline invocation with its own template variables.
+
+### Manifest Mode: Load pipelines from file
+
+Create a manifest file (one spec per line):
+
+```bash
+cat > batch.txt <<EOF
+--var project="api-gateway"
+--var project="auth-service"
+--var project="data-pipeline"
+EOF
+
+./scripts/parallel-run.sh -c config.yaml -f batch.txt -j 2
+```
+
+### Output Structure
+
+```
+.agentmux-out/
+├── ai-safety/
+│   ├── logs/
+│   └── results/
+├── machine-learning/
+│   ├── logs/
+│   └── results/
+└── web-development/
+    ├── logs/
+    └── results/
+```
+
+Each pipeline gets its own isolated output directory. The directory name is derived from template variable values (slugified).
+
+### Example: Batch Content Generation
+
+```yaml
+# batch-config.yaml
+version: 1
+vars:
+  topic: "default-topic"
+
+defaults:
+  model: "opus"
+  max_turns: 10
+
+agents:
+  researcher:
+    prompt: "Research {{.topic}}. Save findings to RESEARCH.md"
+    max_turns: 5
+
+  writer:
+    prompt: "Write article on {{.topic}} using RESEARCH.md"
+    depends_on: [researcher]
+    max_turns: 10
+```
+
+```bash
+# Run 3 articles in parallel (2 at a time)
+./scripts/parallel-run.sh -c batch-config.yaml -j 2 \
+  -- --var topic="Quantum Computing" \
+  -- --var topic="Renewable Energy" \
+  -- --var topic="Space Exploration"
+```
+
+Result:
+```
+=== Parallel Run Summary ===
+  #    Pipeline              Status     Duration   Output
+  1    quantum-computing     ✓ pass     52s        .agentmux-out/quantum-computing/
+  2    renewable-energy      ✓ pass     48s        .agentmux-out/renewable-energy/
+  3    space-exploration     ✓ pass     55s        .agentmux-out/space-exploration/
+Results: 3 passed, 0 failed (3 total)
+```

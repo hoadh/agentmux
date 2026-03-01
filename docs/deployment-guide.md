@@ -527,6 +527,164 @@ cat ~/.agentmux/logs/*.jsonl | jq 'select(.agent == "scout")'
 
 ---
 
+## Batch Execution (Multiple Pipelines in Parallel)
+
+Run multiple agentmux pipelines in parallel with job limiting and summary reporting using `scripts/parallel-run.sh`.
+
+### Overview
+
+`parallel-run.sh` is a POSIX shell wrapper that:
+- Spawns multiple pipelines concurrently (respects job limit)
+- Isolates output directories per pipeline
+- Tracks per-pipeline duration and pass/fail status
+- Outputs summary table on completion
+- Cleans up child processes on Ctrl+C
+
+### Inline Mode
+
+Run pipelines defined on the command line (separated by `--`):
+
+```bash
+./scripts/parallel-run.sh -c config.yaml \
+  -- --var topic="machine-learning" \
+  -- --var topic="web-development" \
+  -- --var topic="devops"
+```
+
+Each `--var` line becomes a separate pipeline invocation. Output goes to `.agentmux-out/machine-learning/`, `.agentmux-out/web-development/`, etc.
+
+### Manifest Mode
+
+Define pipelines in a text file (one spec per line):
+
+```bash
+# pipelines.txt
+--var topic="machine-learning"
+--var topic="web-development"
+--var topic="devops"
+
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt
+```
+
+### Job Limiting
+
+Control parallelism with `-j`:
+
+```bash
+# Default: 4 parallel jobs
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt
+
+# Custom limit: 8 parallel jobs
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt -j 8
+
+# Serial execution: 1 job at a time
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt -j 1
+```
+
+### Output Directory
+
+Customize base output directory with `-o`:
+
+```bash
+./scripts/parallel-run.sh -c config.yaml -f pipelines.txt -o ./batch-results
+```
+
+Creates: `./batch-results/machine-learning/`, `./batch-results/web-development/`, etc.
+
+### Summary Report
+
+After completion, displays:
+
+```
+=== Parallel Run Summary ===
+  #    Pipeline                 Status     Duration   Output
+  1    machine-learning         ✓ pass     45s        .agentmux-out/machine-learning/
+  2    web-development          ✓ pass     38s        .agentmux-out/web-development/
+  3    devops                   ✗ fail     29s        .agentmux-out/devops/
+Results: 2 passed, 1 failed (3 total)
+```
+
+### CI/CD Integration
+
+#### GitHub Actions Example
+
+```yaml
+name: Batch Pipeline
+on: [push]
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24
+
+      - name: Build agentmux
+        run: go build -o agentmux ./cmd/main.go
+
+      - name: Create pipeline manifest
+        run: |
+          cat > pipelines.txt <<EOF
+          --var topic="docs-generation"
+          --var topic="code-review"
+          --var topic="test-strategy"
+          EOF
+
+      - name: Run batch pipelines
+        run: ./scripts/parallel-run.sh -c agentmux.yaml -f pipelines.txt -j 3
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pipeline-results
+          path: .agentmux-out/
+```
+
+#### Cron Job for Daily Batch Processing
+
+```bash
+#!/bin/bash
+# File: /usr/local/bin/daily-batch-pipelines.sh
+
+export PATH="/usr/local/bin:$PATH"
+export CLAUDE_API_KEY="your-api-key"
+
+cd /home/user/projects/batch-analysis
+
+# Define pipelines
+cat > pipelines.txt <<EOF
+--var dataset="sales-q1"
+--var dataset="sales-q2"
+--var dataset="sales-q3"
+--var dataset="sales-q4"
+EOF
+
+# Run up to 4 pipelines in parallel
+/usr/local/bin/agentmux-parallel -c batch.yaml -f pipelines.txt -j 4 -o ./quarterly-results
+
+# Send summary via email
+if [ $? -eq 0 ]; then
+  echo "Batch processing succeeded" | mail -s "Daily Batch Complete" admin@example.com
+else
+  echo "Batch processing failed; check logs" | mail -s "Daily Batch Failed" admin@example.com
+fi
+```
+
+Add to crontab:
+```bash
+# Run at 2 AM daily
+0 2 * * * /usr/local/bin/daily-batch-pipelines.sh >> /var/log/batch-pipelines.log 2>&1
+```
+
+---
+
 ## Getting Help
 
 **Troubleshooting**: For common issues and solutions, see [Troubleshooting Guide](./troubleshooting.md).

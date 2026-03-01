@@ -35,6 +35,7 @@
 - [x] **Result export** as markdown to configurable output directory
 - [x] **Install script** (`scripts/install.sh`) for interactive executable deployment
 - [x] **Batch blog example** (`examples/batch-blog-with-vars.yaml`) demonstrating template variables
+- [x] **Parallel run script** (`scripts/parallel-run.sh`) for batch execution of multiple pipelines with job limiting and summary reporting
 - [x] TUI Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, l toggle, p pipeline, q quit)
 - [x] Batch event processing (up to 50 events/cycle) for TUI responsiveness
 - [x] Concurrent-safe state management (sync.RWMutex on Manager, sync.Mutex on Scheduler)

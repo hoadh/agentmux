@@ -10,6 +10,7 @@
 - **Template Variables**: New `vars` section in YAML config enables Go text/template expansion in agent prompts using `{{.var_name}}` syntax. Feature added 2026-02-27.
 - **Configurable Output Directory**: New `--output-dir` CLI flag and YAML `output_dir` field allow custom location for logs and results. Defaults to `.agentmux-out`. CLI flag overrides YAML config. Feature added 2026-02-27.
 - **Result Export**: New `internal/result/writer.go` saves agent outputs as markdown files to `{OutputDir}/results/{agentName}.md`. Thread-safe via sync.Mutex.
+- **Parallel Run Script**: New `scripts/parallel-run.sh` for batch execution of multiple pipelines in parallel with job limiting (default 4), isolated output directories, and summary reporting. Supports inline mode (`--` separators) and manifest mode (file input). POSIX-compatible, injection-safe (no eval). Feature added 2026-02-28.
 
 ### Changed
 - **Config Loading**: `LoadConfig()` now calls `ExpandTemplates()` automatically after validation. Returns warning list alongside Config.
