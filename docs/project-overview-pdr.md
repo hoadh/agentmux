@@ -69,6 +69,11 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 - **Why**: Faster to type; matches Unix conventions (`gcc -c`, etc.)
 - **How**: Cobra flag `--config` / `-c` bidirectional mapping
 
+### 12. Health Check HTTP Server
+- **What**: `agentmux serve` starts an HTTP server with `/health` JSON endpoint for monitoring
+- **Why**: Enable integration with load balancers, orchestration platforms (Kubernetes), and monitoring systems
+- **How**: Returns JSON with version, uptime, and start timestamp; configurable listen address via `-a` flag
+
 ## Non-Functional Requirements
 
 ### Performance
@@ -121,6 +126,7 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 - [x] Process cleanup on quit; no orphaned processes after exit
 - [x] Agent state transitions correctly (Pending → Running → Done/Failed/Killed)
 - [x] Logs persist to `~/.agentmux/logs/`; no data loss on crash
+- [x] Health check server (`agentmux serve`) returns JSON status; integrates with monitoring systems
 
 ### Non-Functional
 - [x] Tests pass with >80% coverage on parser, scheduler, manager, headless
@@ -215,5 +221,6 @@ agentmux is an open-source Go TUI for orchestrating multi-agent AI workflows. It
 ---
 
 **Document Version**: v0.1.0
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-03-01
 **Owner**: agentmux team
+**Latest Addition**: Health check HTTP server feature (2026-03-01)

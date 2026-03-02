@@ -1,6 +1,6 @@
 # agentmux Codebase Summary
 
-Quick reference for navigating the agentmux codebase. Total: ~5,020 LOC Go + 138 LOC shell across 31 Go files, 10 packages, plus install script.
+Quick reference for navigating the agentmux codebase. Total: ~3,305 LOC Go code + 2,619 LOC tests + 422 LOC shell across multiple Go files and 11 packages.
 
 ## Module
 
@@ -11,7 +11,7 @@ Go 1.24.2+
 
 ## Package Overview
 
-### cmd/ — CLI Entry Points (177 LOC)
+### cmd/ — CLI Entry Points (214 LOC)
 
 CLI framework integration via Cobra. Entry point for all command-line operations.
 
@@ -19,7 +19,8 @@ CLI framework integration via Cobra. Entry point for all command-line operations
 |------|-----|---------|---------|
 | root.go | 21 | `Execute()` | Cobra root command, global flags, error handling |
 | run.go | 135 | `runCmd` | Launch command: config load → DAG build → manager init → TUI or headless start |
-| version.go | 21 | `versionCmd` | Display version info |
+| serve.go | 33 | `serveCmd` | HTTP health check server: listens on configurable address, returns JSON health report |
+| version.go | 25 | `versionCmd` | Display version info |
 
 **Key Functions**:
 - `Execute()`: Cobra command dispatcher; entry point from main.go
@@ -145,13 +146,13 @@ Bubbletea composite UI: sidebar, detail view, statusbar, spawn modal.
 - `?`: Display help
 - `q`: Quit gracefully
 
-### internal/headless/ — Non-TUI Pipeline Execution (273 LOC code + tests)
+### internal/headless/ — Non-TUI Pipeline Execution (290 LOC code + tests)
 
 Headless (non-interactive) mode for automation and CI/CD integration.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| runner.go | 160 | Main orchestration; config load, DAG build, agent spawning without TUI |
+| runner.go | 177 | Main orchestration; config load, DAG build, agent spawning without TUI |
 | formatter.go | 113 | Output formatting; converts agent events to structured text (JSON, plain text) |
 
 **Design Pattern**: Headless mode reuses config, DAG, Manager, and event handling logic from TUI; replaces interactive Bubbletea with formatter-based output.
@@ -162,6 +163,16 @@ Headless (non-interactive) mode for automation and CI/CD integration.
 - Exit codes for pipeline success/failure
 - Signal handling (SIGTERM → graceful shutdown)
 - Suitable for CI/CD, cron jobs, and batch processing
+
+### internal/health/ — Health Check Server (61 LOC code)
+
+Health status endpoint for monitoring and orchestration platforms.
+
+| File | LOC | Purpose |
+|------|-----|---------|
+| health.go | 61 | Health check report: uptime, version, startup time; JSON response format |
+
+**Key Feature**: Returns JSON health status for HTTP `/health` endpoint. Used by `agentmux serve` command to provide monitoring integration for load balancers and orchestration systems.
 
 ### internal/log/ — Event Audit Trail (77 LOC code)
 
@@ -329,20 +340,23 @@ go test -v ./...           # Verbose output
 
 ## Code Quality Metrics
 
-- **Total LOC**: ~3,150 (code) + ~2,380 (tests) = ~5,530 total
-- **Avg File Size**: ~102 LOC per file (excellent for context management)
+- **Total LOC**: ~3,305 (code) + ~2,619 (tests) = ~5,924 total
+- **Avg File Size**: ~80 LOC per file (excellent for context management)
 - **Max File Size**: 622 LOC (app.go) — reasonable for composite TUI root model
-- **Test Count**: 135+ tests across 10 packages
-- **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner, config)
+- **Test Count**: 135+ tests across 11 packages
+- **Coverage**: >80% on critical paths (parser, scheduler, manager, headless runner, config, health)
 
 ## Example Pipelines
 
-Located in `examples/` directory:
+Located in `examples/` directory (5 example configurations):
 
 | File | Purpose |
 |------|---------|
-| `agentmux.yaml` | Basic 5-agent pipeline (scout → planner → coder → tester → reviewer) |
+| `blog-pipeline.yaml` | Sequential 5-stage blog writing pipeline (research → outline → draft → edit → final) |
 | `batch-blog-with-vars.yaml` | Batch blog generation with template variables for topic and style overrides |
+| `parallel-analysis.yaml` | Fan-out/fan-in code analysis: scouts different aspects in parallel, planner synthesizes |
+| `coding-pipeline.yaml` | Development workflow: scout codebase → planner designs → coder implements → tester validates → reviewer reviews |
+| `mixed-backend-review.yaml` | Multi-backend example: uses both Claude and Gemini agents in same pipeline |
 
 Example execution with template variable override:
 ```bash
@@ -370,5 +384,5 @@ agentmux run -c examples/batch-blog-with-vars.yaml --var topic="AI Safety" --var
 ---
 
 **Document Version**: v0.1.0
-**Last Updated**: 2026-02-27
-**Features Added**: Template variables, configurable output directory
+**Last Updated**: 2026-03-01
+**Latest Features**: Health check server (`agentmux serve`), Template variables, Configurable output directory, Parallel run script

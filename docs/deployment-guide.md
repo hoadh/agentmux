@@ -89,7 +89,8 @@ sudo mv agentmux-darwin-arm64 /usr/local/bin/agentmux
 
 ```bash
 agentmux --version     # Should print v0.1.0
-agentmux run --help    # Should show usage
+agentmux run --help    # Show run command usage
+agentmux serve --help  # Show serve command usage
 ```
 
 ---
@@ -685,6 +686,77 @@ Add to crontab:
 
 ---
 
+## Health Check Server
+
+Start an HTTP server for monitoring and orchestration platform integration.
+
+### Basic Usage
+
+```bash
+# Start health server on default port :8080
+agentmux serve
+
+# Start on custom address
+agentmux serve -a :9000
+agentmux serve --addr localhost:8080
+```
+
+### Health Endpoint
+
+The `/health` endpoint returns a JSON health report:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "version": "v0.1.0",
+  "uptime": "2h30m15s",
+  "started_at": "2026-03-01T08:15:30Z"
+}
+```
+
+### Kubernetes Integration Example
+
+Health check for Kubernetes readiness probe:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agentmux-monitor
+spec:
+  containers:
+  - name: agentmux
+    image: agentmux:v0.1.0
+    command: ["agentmux", "serve", "--addr", ":8080"]
+    ports:
+    - containerPort: 8080
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 2
+      periodSeconds: 10
+```
+
+### Load Balancer Health Check
+
+For health-based load balancing:
+
+```bash
+# Start agentmux serve in the background
+agentmux serve -a :8080 &
+
+# Monitor health status
+watch -n 5 'curl -s http://localhost:8080/health | jq .'
+```
+
+---
+
 ## Getting Help
 
 **Troubleshooting**: For common issues and solutions, see [Troubleshooting Guide](./troubleshooting.md).
@@ -698,4 +770,5 @@ Add to crontab:
 ---
 
 **Document Version**: v0.1.0
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-03-01
+**Latest Features**: Health check server, Batch execution script, Headless mode CI/CD examples

@@ -6,16 +6,22 @@
 - **Project Root**: `github.com/hoadh/agentmux`
 - **Structure**:
   ```
-  cmd/              # CLI entry points (Cobra commands)
+  cmd/              # CLI entry points (Cobra commands: run, serve, version)
   internal/         # Private packages (not imported outside module)
-    ├── agent/      # Process, parser, manager, state
+    ├── agent/      # Process, parser, manager, state, backend registry
+    ├── backend/    # Claude & Gemini CLI implementations
     ├── config/     # YAML parsing and validation
     ├── dag/        # Graph and scheduler
-    ├── log/        # JSONL writer
-    └── tui/        # Bubbletea UI components
+    ├── health/     # Health check endpoint
+    ├── headless/   # Non-TUI runner and formatters
+    ├── log/        # JSONL event writer
+    ├── result/     # Markdown result writer
+    └── tui/        # Bubbletea UI components (sidebar, detail, statusbar, spawn)
+  scripts/          # Deployment helpers (install.sh, parallel-run.sh)
+  examples/         # Example pipeline configurations
   main.go           # Bootstrap entry point
   go.mod, go.sum    # Dependency management
-  agentmux.yaml     # Configuration file
+  agentmux.yaml     # Default configuration file
   ```
 
 All package logic lives in `internal/` to enforce clean API boundaries. TUI and headless modes are mutually exclusive frontends sharing core packages.

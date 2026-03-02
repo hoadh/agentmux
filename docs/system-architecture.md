@@ -83,6 +83,10 @@ Non-TUI pipeline execution for CI/CD and scripted workflows.
 
 - **writer.go** (34 LOC): Thread-safe markdown result saver; saves agent output to `{OutputDir}/results/{agentName}.md`
 
+### 9. Health Check (`internal/health/`)
+
+- **health.go** (61 LOC): JSON health report endpoint; returns uptime, version, and startup timestamp for monitoring integration
+
 ## Key Design Patterns
 
 ### Event-Driven DAG Scheduling
@@ -161,21 +165,26 @@ Critical pattern for TUI model correctness:
 
 ```
 CLI (Cobra)
-  ├─> Config (YAML parse + backend validation)
-  ├─> Graph (DAG validation & topo sort)
-  ├─> Manager (state tracking)
-  ├─> Scheduler (dependency orchestration)
-  ├─> TUI (Bubbletea root)        ← default mode
-  │     ├─> Sidebar (agent list)
-  │     ├─> Detail (logs)
-  │     ├─> StatusBar (progress)
-  │     └─> Spawn (manual trigger)
-  └─> Headless (Runner)            ← --headless mode
-        ├─> Text/NDJSON formatters
-        └─> Signal handling (graceful shutdown)
-             ├─> Process (subprocess per agent via backend)
-             ├─> Parser (NDJSON reader)
-             └─> Writer (JSONL audit log)
+  ├─> run command
+  │     ├─> Config (YAML parse + backend validation)
+  │     ├─> Graph (DAG validation & topo sort)
+  │     ├─> Manager (state tracking)
+  │     ├─> Scheduler (dependency orchestration)
+  │     ├─> TUI (Bubbletea root)        ← default mode
+  │     │     ├─> Sidebar (agent list)
+  │     │     ├─> Detail (logs)
+  │     │     ├─> StatusBar (progress)
+  │     │     └─> Spawn (manual trigger)
+  │     └─> Headless (Runner)            ← --headless mode
+  │           ├─> Text/NDJSON formatters
+  │           └─> Signal handling (graceful shutdown)
+  │                ├─> Process (subprocess per agent via backend)
+  │                ├─> Parser (NDJSON reader)
+  │                └─> Writer (JSONL audit log)
+  │
+  └─> serve command
+        └─> HTTP Health Check Server (`:8080` default)
+              └─> /health endpoint → JSON health report
 ```
 
 Each agent's Process spawns a subprocess and reads NDJSON output asynchronously. The Scheduler monitors completion and signals ready dependents. In TUI mode, the UI subscribes to manager events for real-time display. In headless mode, the Runner polls events and streams formatted output to stdout.
@@ -248,3 +257,8 @@ CLI flags override YAML values with this precedence (highest to lowest):
 - `output_dir` becomes `/tmp/logs` (CLI override)
 
 The Config package parses this into typed structs (`Config`, `AgentDefaults`, `AgentConfig`) for downstream validation and use. See [Configuration Guide](./configuration.md) for full reference.
+
+---
+
+**Document Version**: v0.1.0
+**Last Updated**: 2026-03-01
