@@ -11,11 +11,15 @@
 - **Configurable Output Directory**: New `--output-dir` CLI flag and YAML `output_dir` field allow custom location for logs and results. Defaults to `.agentmux-out`. CLI flag overrides YAML config. Feature added 2026-02-27.
 - **Result Export**: New `internal/result/writer.go` saves agent outputs as markdown files to `{OutputDir}/results/{agentName}.md`. Thread-safe via sync.Mutex.
 - **Parallel Run Script**: New `scripts/parallel-run.sh` for batch execution of multiple pipelines in parallel with job limiting (default 4), isolated output directories, and summary reporting. Supports inline mode (`--` separators) and manifest mode (file input). POSIX-compatible, injection-safe (no eval). Feature added 2026-02-28.
-- **Health Check Server**: New `agentmux serve` command starts HTTP server with `/health` JSON endpoint for monitoring integration. Configurable listen address via `-a` flag (default `:8080`). Returns version, uptime, and startup timestamp. Feature added 2026-03-01.
+- **Backend Check Command**: New `agentmux check` command prints CLI backend availability (claude, gemini) and exits. Replaces the former `agentmux serve` HTTP health server with a simpler CLI-oriented approach (YAGNI). Exit code 1 if any backend is missing. Feature added 2026-03-02.
 
 ### Changed
 - **Config Loading**: `LoadConfig()` now calls `ExpandTemplates()` automatically after validation. Returns warning list alongside Config.
 - **Output Directory Structure**: Logs now save to `{OutputDir}/logs/` and results to `{OutputDir}/results/` instead of hardcoded `~/.agentmux/logs/`.
+
+### Removed
+- **Health Check HTTP Server**: Removed `agentmux serve` command, HTTP server, uptime tracking, and memory stats. Replaced by simpler `agentmux check` CLI command.
+- **StartTime**: Removed startup time tracking from `cmd/version.go` (no longer needed without uptime).
 
 ### Fixed
 - N/A

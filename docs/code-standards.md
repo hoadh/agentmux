@@ -6,13 +6,13 @@
 - **Project Root**: `github.com/hoadh/agentmux`
 - **Structure**:
   ```
-  cmd/              # CLI entry points (Cobra commands: run, serve, version)
+  cmd/              # CLI entry points (Cobra commands: run, check, version)
   internal/         # Private packages (not imported outside module)
     ├── agent/      # Process, parser, manager, state, backend registry
     ├── backend/    # Claude & Gemini CLI implementations
     ├── config/     # YAML parsing and validation
     ├── dag/        # Graph and scheduler
-    ├── health/     # Health check endpoint
+    ├── health/     # Backend availability check
     ├── headless/   # Non-TUI runner and formatters
     ├── log/        # JSONL event writer
     ├── result/     # Markdown result writer

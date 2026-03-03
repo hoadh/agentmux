@@ -2,12 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 )
-
-var StartTime time.Time
 
 const Version = "v0.1.0"
 
@@ -20,6 +17,5 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
-	StartTime = time.Now()
 	rootCmd.AddCommand(versionCmd)
 }

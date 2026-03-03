@@ -1,137 +1,84 @@
 package health
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestCheck_ReturnsVersion(t *testing.T) {
-	report := Check("v1.2.3", time.Now())
-	if report.Version != "v1.2.3" {
-		t.Errorf("version: got %q, want %q", report.Version, "v1.2.3")
+func TestCheckBackends_ReturnsAllBackends(t *testing.T) {
+	results := CheckBackends()
+	if len(results) != len(backends) {
+		t.Fatalf("expected %d backends, got %d", len(backends), len(results))
 	}
-}
-
-func TestCheck_EmptyVersion(t *testing.T) {
-	report := Check("", time.Now())
-	if report.Version != "" {
-		t.Errorf("version: got %q, want empty", report.Version)
-	}
-}
-
-func TestCheck_UptimePositive(t *testing.T) {
-	startTime := time.Now().Add(-5 * time.Second)
-	report := Check("v1.0.0", startTime)
-	if report.UptimeSeconds < 5.0 {
-		t.Errorf("uptime: got %f, want >= 5.0", report.UptimeSeconds)
-	}
-}
-
-func TestCheck_UptimeNearZero(t *testing.T) {
-	report := Check("v1.0.0", time.Now())
-	if report.UptimeSeconds < 0 {
-		t.Errorf("uptime should not be negative, got %f", report.UptimeSeconds)
-	}
-}
-
-func TestCheck_MemoryFieldsPositive(t *testing.T) {
-	report := Check("v1.0.0", time.Now())
-	if report.Memory.AllocMB < 0 {
-		t.Errorf("alloc_mb should not be negative, got %f", report.Memory.AllocMB)
-	}
-	if report.Memory.SysMB <= 0 {
-		t.Errorf("sys_mb should be positive, got %f", report.Memory.SysMB)
-	}
-}
-
-func TestCheck_BackendsMapPopulated(t *testing.T) {
-	report := Check("v1.0.0", time.Now())
-	if report.Backends == nil {
-		t.Fatal("backends map should not be nil")
-	}
-	for _, name := range backends {
-		val, ok := report.Backends[name]
-		if !ok {
-			t.Errorf("backend %q missing from report", name)
-		}
-		if val != "ok" && val != "not found" {
-			t.Errorf("backend %q: unexpected value %q", name, val)
+	for i, b := range results {
+		if b.Name != backends[i] {
+			t.Errorf("backend %d: got name %q, want %q", i, b.Name, backends[i])
 		}
 	}
 }
 
-func TestCheck_StatusOKWhenAllBackendsFound(t *testing.T) {
-	// Save and restore the global backends list.
+func TestCheckBackends_AvailabilityIsBool(t *testing.T) {
+	results := CheckBackends()
+	for _, b := range results {
+		// Available is a bool; just verify it doesn't panic and is set.
+		_ = b.Available
+	}
+}
+
+func TestCheckBackends_KnownBackendFound(t *testing.T) {
 	orig := backends
 	defer func() { backends = orig }()
 
-	// Use a backend that is guaranteed to exist on any Unix system.
+	// "sh" is guaranteed to exist on any Unix system.
 	backends = []string{"sh"}
 
-	report := Check("v1.0.0", time.Now())
-	if report.Status != "ok" {
-		t.Errorf("status: got %q, want %q", report.Status, "ok")
+	results := CheckBackends()
+	if len(results) != 1 {
+		t.Fatalf("expected 1 backend, got %d", len(results))
 	}
-	if report.Backends["sh"] != "ok" {
-		t.Errorf("sh backend: got %q, want %q", report.Backends["sh"], "ok")
+	if !results[0].Available {
+		t.Errorf("sh should be available")
 	}
 }
 
-func TestCheck_StatusDegradedWhenBackendMissing(t *testing.T) {
+func TestCheckBackends_MissingBackend(t *testing.T) {
 	orig := backends
 	defer func() { backends = orig }()
 
 	backends = []string{"this-binary-definitely-does-not-exist-xyz"}
 
-	report := Check("v1.0.0", time.Now())
-	if report.Status != "degraded" {
-		t.Errorf("status: got %q, want %q", report.Status, "degraded")
+	results := CheckBackends()
+	if len(results) != 1 {
+		t.Fatalf("expected 1 backend, got %d", len(results))
 	}
-	if report.Backends["this-binary-definitely-does-not-exist-xyz"] != "not found" {
-		t.Errorf("missing backend value: got %q, want %q",
-			report.Backends["this-binary-definitely-does-not-exist-xyz"], "not found")
-	}
-}
-
-func TestCheck_StatusDegradedWhenSomeBackendsMissing(t *testing.T) {
-	orig := backends
-	defer func() { backends = orig }()
-
-	backends = []string{"sh", "this-binary-definitely-does-not-exist-xyz"}
-
-	report := Check("v1.0.0", time.Now())
-	if report.Status != "degraded" {
-		t.Errorf("status: got %q, want %q", report.Status, "degraded")
+	if results[0].Available {
+		t.Errorf("nonexistent binary should not be available")
 	}
 }
 
-func TestCheck_EmptyBackends(t *testing.T) {
+func TestCheckBackends_EmptyList(t *testing.T) {
 	orig := backends
 	defer func() { backends = orig }()
 
 	backends = []string{}
 
-	report := Check("v1.0.0", time.Now())
-	if report.Status != "ok" {
-		t.Errorf("status with no backends: got %q, want %q", report.Status, "ok")
-	}
-	if len(report.Backends) != 0 {
-		t.Errorf("backends map should be empty, got len=%d", len(report.Backends))
+	results := CheckBackends()
+	if len(results) != 0 {
+		t.Errorf("expected 0 backends, got %d", len(results))
 	}
 }
 
-func TestCheck_FutureStartTimeUptimeNonNegative(t *testing.T) {
-	// startTime slightly in the future — uptime may be tiny negative due to clock precision.
-	// The function uses time.Since which can return slightly negative; document that here.
-	startTime := time.Now().Add(time.Second)
-	report := Check("v1.0.0", startTime)
-	// We don't assert on sign — just ensure the field is populated (no panic).
-	_ = report.UptimeSeconds
-}
+func TestCheckBackends_MixedAvailability(t *testing.T) {
+	orig := backends
+	defer func() { backends = orig }()
 
-func TestCheck_NumGCField(t *testing.T) {
-	// NumGC should always be >= 0 (it is a uint32, so always non-negative).
-	report := Check("v1.0.0", time.Now())
-	// Just ensure it is accessible and reasonable.
-	_ = report.Memory.NumGC
+	backends = []string{"sh", "this-binary-definitely-does-not-exist-xyz"}
+
+	results := CheckBackends()
+	if len(results) != 2 {
+		t.Fatalf("expected 2 backends, got %d", len(results))
+	}
+	if !results[0].Available {
+		t.Errorf("sh should be available")
+	}
+	if results[1].Available {
+		t.Errorf("nonexistent binary should not be available")
+	}
 }

@@ -19,8 +19,8 @@ CLI framework integration via Cobra. Entry point for all command-line operations
 |------|-----|---------|---------|
 | root.go | 21 | `Execute()` | Cobra root command, global flags, error handling |
 | run.go | 135 | `runCmd` | Launch command: config load → DAG build → manager init → TUI or headless start |
-| serve.go | 33 | `serveCmd` | HTTP health check server: listens on configurable address, returns JSON health report |
-| version.go | 25 | `versionCmd` | Display version info |
+| check.go | 34 | `checkCmd` | CLI backend availability check: prints status of each backend and exits |
+| version.go | 21 | `versionCmd` | Display version info |
 
 **Key Functions**:
 - `Execute()`: Cobra command dispatcher; entry point from main.go
@@ -164,15 +164,15 @@ Headless (non-interactive) mode for automation and CI/CD integration.
 - Signal handling (SIGTERM → graceful shutdown)
 - Suitable for CI/CD, cron jobs, and batch processing
 
-### internal/health/ — Health Check Server (61 LOC code)
+### internal/health/ — Backend Availability Check (22 LOC code)
 
-Health status endpoint for monitoring and orchestration platforms.
+CLI backend availability checking.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| health.go | 61 | Health check report: uptime, version, startup time; JSON response format |
+| health.go | 22 | Backend availability check via exec.LookPath |
 
-**Key Feature**: Returns JSON health status for HTTP `/health` endpoint. Used by `agentmux serve` command to provide monitoring integration for load balancers and orchestration systems.
+**Key Feature**: Checks whether CLI backends (claude, gemini) are available in PATH. Used by `agentmux check` command.
 
 ### internal/log/ — Event Audit Trail (77 LOC code)
 
@@ -385,4 +385,4 @@ agentmux run -c examples/batch-blog-with-vars.yaml --var topic="AI Safety" --var
 
 **Document Version**: v0.1.0
 **Last Updated**: 2026-03-01
-**Latest Features**: Health check server (`agentmux serve`), Template variables, Configurable output directory, Parallel run script
+**Latest Features**: Backend check command (`agentmux check`), Template variables, Configurable output directory, Parallel run script

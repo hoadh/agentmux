@@ -36,7 +36,7 @@
 - [x] **Install script** (`scripts/install.sh`) for interactive executable deployment
 - [x] **Batch blog example** (`examples/batch-blog-with-vars.yaml`) demonstrating template variables
 - [x] **Parallel run script** (`scripts/parallel-run.sh`) for batch execution of multiple pipelines with job limiting and summary reporting
-- [x] **Health check server** (`agentmux serve`) with HTTP `/health` JSON endpoint for monitoring integration
+- [x] **Backend check command** (`agentmux check`) for verifying CLI backend availability
 - [x] TUI Keybindings (j/k nav, Tab focus, n spawn, K kill, r restart, l toggle, p pipeline, q quit)
 - [x] Batch event processing (up to 50 events/cycle) for TUI responsiveness
 - [x] Concurrent-safe state management (sync.RWMutex on Manager, sync.Mutex on Scheduler)
@@ -286,5 +286,5 @@
 
 **Document Version**: v0.1.0
 **Last Updated**: 2026-03-01
-**Latest Features**: Health check server (2026-03-01), Template variables (2026-02-27), Configurable output directory (2026-02-27)
+**Latest Features**: Backend check command (2026-03-02), Template variables (2026-02-27), Configurable output directory (2026-02-27)
 **Next Review**: 2026-05-27 (post-v0.2 planning)

@@ -13,6 +13,7 @@ Agentmux is a Go TUI application for spawning, monitoring, and orchestrating AI 
 
 - **root.go**: Cobra CLI entry point, flags, configuration loading
 - **run.go**: Launch command initializing config, DAG, manager, and TUI
+- **check.go**: Backend CLI availability check
 - **version.go**: Version information
 
 Cobra provides hierarchical command structure and flag parsing.
@@ -85,7 +86,7 @@ Non-TUI pipeline execution for CI/CD and scripted workflows.
 
 ### 9. Health Check (`internal/health/`)
 
-- **health.go** (61 LOC): JSON health report endpoint; returns uptime, version, and startup timestamp for monitoring integration
+- **health.go** (22 LOC): Backend availability check via `exec.LookPath`; used by `agentmux check` command
 
 ## Key Design Patterns
 
@@ -182,9 +183,9 @@ CLI (Cobra)
   │                ├─> Parser (NDJSON reader)
   │                └─> Writer (JSONL audit log)
   │
-  └─> serve command
-        └─> HTTP Health Check Server (`:8080` default)
-              └─> /health endpoint → JSON health report
+  └─> check command
+        └─> Backend availability check (exec.LookPath)
+              └─> CLI output: ✓/✗ per backend
 ```
 
 Each agent's Process spawns a subprocess and reads NDJSON output asynchronously. The Scheduler monitors completion and signals ready dependents. In TUI mode, the UI subscribes to manager events for real-time display. In headless mode, the Runner polls events and streams formatted output to stdout.

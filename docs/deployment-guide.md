@@ -90,7 +90,7 @@ sudo mv agentmux-darwin-arm64 /usr/local/bin/agentmux
 ```bash
 agentmux --version     # Should print v0.1.0
 agentmux run --help    # Show run command usage
-agentmux serve --help  # Show serve command usage
+agentmux check         # Verify backend CLI availability
 ```
 
 ---
@@ -686,74 +686,23 @@ Add to crontab:
 
 ---
 
-## Health Check Server
+## Backend Availability Check
 
-Start an HTTP server for monitoring and orchestration platform integration.
+Verify that required CLI backends are installed and available in PATH.
 
-### Basic Usage
-
-```bash
-# Start health server on default port :8080
-agentmux serve
-
-# Start on custom address
-agentmux serve -a :9000
-agentmux serve --addr localhost:8080
-```
-
-### Health Endpoint
-
-The `/health` endpoint returns a JSON health report:
+### Usage
 
 ```bash
-curl http://localhost:8080/health
+agentmux check
 ```
 
-Response:
-```json
-{
-  "status": "healthy",
-  "version": "v0.1.0",
-  "uptime": "2h30m15s",
-  "started_at": "2026-03-01T08:15:30Z"
-}
+Output:
+```
+  ✓ claude: found
+  ✗ gemini: not found
 ```
 
-### Kubernetes Integration Example
-
-Health check for Kubernetes readiness probe:
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: agentmux-monitor
-spec:
-  containers:
-  - name: agentmux
-    image: agentmux:v0.1.0
-    command: ["agentmux", "serve", "--addr", ":8080"]
-    ports:
-    - containerPort: 8080
-    readinessProbe:
-      httpGet:
-        path: /health
-        port: 8080
-      initialDelaySeconds: 2
-      periodSeconds: 10
-```
-
-### Load Balancer Health Check
-
-For health-based load balancing:
-
-```bash
-# Start agentmux serve in the background
-agentmux serve -a :8080 &
-
-# Monitor health status
-watch -n 5 'curl -s http://localhost:8080/health | jq .'
-```
+Exit code is `0` if all backends are found, `1` if any are missing.
 
 ---
 
@@ -771,4 +720,4 @@ watch -n 5 'curl -s http://localhost:8080/health | jq .'
 
 **Document Version**: v0.1.0
 **Last Updated**: 2026-03-01
-**Latest Features**: Health check server, Batch execution script, Headless mode CI/CD examples
+**Latest Features**: Backend check command, Batch execution script, Headless mode CI/CD examples
