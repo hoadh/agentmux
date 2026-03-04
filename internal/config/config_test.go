@@ -102,8 +102,8 @@ func TestApplyDefaults(t *testing.T) {
 	if len(agent1.AllowedTools) != 2 {
 		t.Errorf("agent1 tools count: got %d, want 2", len(agent1.AllowedTools))
 	}
-	if agent1.WorkDir != "." {
-		t.Errorf("agent1 workdir: got %q, want %q", agent1.WorkDir, ".")
+	if agent1.WorkDir != "" {
+		t.Errorf("agent1 workdir: got %q, want %q", agent1.WorkDir, "")
 	}
 
 	// agent2 should override model and max_turns
@@ -138,8 +138,8 @@ func TestApplyDefaults_NoDefaults(t *testing.T) {
 	if agent1.MaxTurns != 0 {
 		t.Errorf("agent1 max_turns should be 0, got %d", agent1.MaxTurns)
 	}
-	if agent1.WorkDir != "." {
-		t.Errorf("agent1 workdir: got %q, want %q", agent1.WorkDir, ".")
+	if agent1.WorkDir != "" {
+		t.Errorf("agent1 workdir: got %q, want %q", agent1.WorkDir, "")
 	}
 }
 

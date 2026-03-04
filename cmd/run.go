@@ -82,6 +82,16 @@ func runApp(cmd *cobra.Command, args []string) error {
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = ".agentmux-out"
 	}
+	// Set agent working directory to output_dir so agent-created files
+	// (e.g. VOCAB.md, KANJI.md) land there instead of CWD.
+	// Agents with explicit workdir in YAML (including ".") are preserved.
+	for name, agent := range cfg.Agents {
+		if agent.WorkDir == "" {
+			agent.WorkDir = cfg.OutputDir
+			cfg.Agents[name] = agent
+		}
+	}
+
 	logsDir := filepath.Join(cfg.OutputDir, "logs")
 	resultsDir := filepath.Join(cfg.OutputDir, "results")
 	if err := os.MkdirAll(logsDir, 0755); err != nil {

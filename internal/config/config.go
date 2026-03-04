@@ -131,9 +131,8 @@ func ApplyDefaults(cfg *Config) {
 		if agent.MaxTurns == 0 && cfg.Defaults.MaxTurns > 0 {
 			agent.MaxTurns = cfg.Defaults.MaxTurns
 		}
-		if agent.WorkDir == "" {
-			agent.WorkDir = "."
-		}
+		// WorkDir "" is left as-is; cmd/run.go resolves it to output_dir.
+		// Explicit workdir (including ".") from YAML is preserved.
 		cfg.Agents[name] = agent
 	}
 }
